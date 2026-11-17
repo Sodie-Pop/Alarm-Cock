@@ -12,13 +12,15 @@ No physical-device checks have been executed in the cloud environment. Record de
 - Kill the process without Android force stop while ringing; confirm service/audio recovery and retained task progress. Reboot while ringing and confirm the stored session resumes when opening the app.
 - Revoke exact-alarm permission, notifications, and full-screen access individually. Verify readiness warnings, enabling failures, and regrant/rescheduling. Confirm no permission denial is presented as a successfully enabled alarm.
 
-## Closed-app safeguards (0.3.1)
+## Closed-app safeguards (0.4.0)
 
 - Upgrade from 0.3.0 without clearing data. On Android 13+, confirm Settings → Apps → Task Alarm → Alarms & reminders shows access granted and cannot be turned off.
 - Schedule an alarm 3 minutes ahead, then use Settings → Apps → Task Alarm → Force stop. Confirm it does **not** ring (expected Android behavior). Repeat, but open the app once after force stop: it must ring on time. Also check `adb shell dumpsys alarm | grep -A3 com.taskalarm` before and after opening.
 - Open the app within a minute after a force-stopped alarm's time; it must ring immediately rather than skip to the next day.
 - While ringing (screen off, app not visible), swipe the app from recents. Ringing must continue or resume within about 5 seconds. Then `adb shell am kill com.taskalarm.app` (or `kill` the process with `adb shell`) while ringing; ringing must resume within about a minute with task progress intact.
-- Reboot while ringing, unlock, and confirm ringing resumes within seconds without opening the app.
+- Reboot while ringing and **do not unlock**; ringing must resume within seconds (default sound, "Unlock your phone" notification text). Unlock and complete the tasks.
+- Schedule an alarm 5 minutes ahead using a custom imported sound, reboot, and leave the phone locked. It must ring on time with the default alarm sound or beep. Repeat after unlocking (custom sound must play). Compare `adb shell dumpsys alarm` before and after unlock.
+- Upgrade from 0.3.0 without clearing data, then reboot without unlocking: note whether alarms ring (migration happens only after the app runs once unlocked). Open the app once and repeat; they must ring.
 - Set Battery usage to Restricted, schedule an alarm, and close the app. Record whether normal ringing or the repeating backup notification appears; opening the notification must start normal ringing. Confirm the next repeat is still scheduled. Restore Battery usage afterward.
 - Choose an imported sound, delete/rename it so playback fails, and ring with the screen off for 5+ minutes; the fallback beep must keep going.
 - Dismiss and snooze alarms; confirm `adb shell dumpsys alarm` shows no leftover `taskalarm://ringing/backstop` alarm and the lock screen's next-alarm time returns to the real next alarm.

@@ -120,8 +120,7 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
     val show = PendingIntent.getActivity(context, 0, launchIntent(), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     manager.setAlarmClock(AlarmManager.AlarmClockInfo(alarm.getLong("nextAt"), show), receiver(alarm.getString("id")))
   }
-  fun launchIntent(): Intent = context.packageManager.getLaunchIntentForPackage(context.packageName)!!
-    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+  fun launchIntent(): Intent = launchIntent(context)
 
   fun fire(id: String) = synchronized(LOCK) {
     val alarm = store.find(id) ?: return@synchronized
@@ -287,6 +286,13 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
 
   companion object {
     val LOCK = Any()
+    /**
+     * Explicit app launch intent. getLaunchIntentForPackage hides non-direct-boot-aware activities before the
+     * first unlock, which would break scheduling and ringing notifications on a locked phone after reboot.
+     */
+    fun launchIntent(context: Context): Intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+      .setClassName(context, "com.taskalarm.app.MainActivity")
+      .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
     const val BACKSTOP_MS = 60_000L
     const val REARM_GRACE_MS = 60_000L
   }

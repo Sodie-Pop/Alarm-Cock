@@ -1,11 +1,13 @@
 package com.taskalarm.engine
 
 import android.content.Context
+import android.os.UserManager
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 
 internal class AlarmStore(context: Context) {
-  private val prefs = context.getSharedPreferences("task_alarm_v1", Context.MODE_PRIVATE)
+  private val prefs = storage(context).getSharedPreferences(NAME, Context.MODE_PRIVATE)
   fun alarms(): List<JSONObject> {
     val array = JSONArray(prefs.getString("alarms", "[]"))
     return (0 until array.length()).map { array.getJSONObject(it) }
@@ -29,5 +31,33 @@ internal class AlarmStore(context: Context) {
   }
   fun checks(value: List<JSONObject>) {
     check(prefs.edit().putString("wake_checks", JSONArray(value).toString()).commit()) { "Unable to save wake-up checks" }
+  }
+
+  companion object {
+    const val NAME = "task_alarm_v1"
+
+    /**
+     * Device-protected storage stays readable before the first unlock after a reboot, so alarms can be restored
+     * and rung while the phone is still locked (direct boot). Imported sound files remain in credential storage;
+     * before unlock, playback falls back to the default alarm sound or the beep.
+     */
+    fun storage(context: Context): Context {
+      val device = context.createDeviceProtectedStorageContext()
+      if (context.getSystemService(UserManager::class.java).isUserUnlocked) migrate(context, device)
+      return device
+    }
+
+    /** Versions before 0.4.0 kept state in credential-protected storage; move it once the user has unlocked. */
+    private fun migrate(context: Context, device: Context) {
+      val legacy = File(context.dataDir, "shared_prefs/$NAME.xml")
+      if (!legacy.exists() || legacy.canonicalFile == File(device.dataDir, "shared_prefs/$NAME.xml").canonicalFile) return
+      synchronized(AlarmEngine.LOCK) {
+        if (!legacy.exists()) return
+        // Device-protected data is newer than any leftover legacy file; never overwrite it.
+        if (device.getSharedPreferences(NAME, Context.MODE_PRIVATE).all.isEmpty()) {
+          check(device.moveSharedPreferencesFrom(context, NAME)) { "Unable to migrate alarms" }
+        } else context.deleteSharedPreferences(NAME)
+      }
+    }
   }
 }

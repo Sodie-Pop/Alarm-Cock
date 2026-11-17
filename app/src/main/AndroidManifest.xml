@@ -20,11 +20,13 @@
         <category android:name="android.intent.category.LAUNCHER" />
       </intent-filter>
     </activity>
-    <service android:name="com.taskalarm.engine.RingingService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
-    <receiver android:name="com.taskalarm.engine.AlarmReceiver" android:exported="false" />
-    <receiver android:name="com.taskalarm.engine.WakeCheckReceiver" android:exported="false" />
-    <receiver android:name="com.taskalarm.engine.RestoreReceiver" android:exported="false">
+    <!-- Delivery components are direct-boot aware so alarms restore and ring before the first unlock after a reboot. -->
+    <service android:name="com.taskalarm.engine.RingingService" android:exported="false" android:directBootAware="true" android:foregroundServiceType="mediaPlayback" />
+    <receiver android:name="com.taskalarm.engine.AlarmReceiver" android:exported="false" android:directBootAware="true" />
+    <receiver android:name="com.taskalarm.engine.WakeCheckReceiver" android:exported="false" android:directBootAware="true" />
+    <receiver android:name="com.taskalarm.engine.RestoreReceiver" android:exported="false" android:directBootAware="true">
       <intent-filter>
+        <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
         <action android:name="android.intent.action.BOOT_COMPLETED" />
         <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
         <action android:name="android.intent.action.TIME_SET" />

@@ -28,7 +28,7 @@ internal class WakeChecks(
     Intent(context, WakeCheckReceiver::class.java).setData(Uri.parse("taskalarm://wake/$id/$action")),
     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
   private fun open() = PendingIntent.getActivity(context, 0,
-    context.packageManager.getLaunchIntentForPackage(context.packageName)!!.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+    AlarmEngine.launchIntent(context),
     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
   private fun notificationId(id: String) = 2000 + (id.hashCode() and 0x0fffffff)
   private fun put(record: JSONObject) {

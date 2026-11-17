@@ -38,7 +38,7 @@ Each alarm has **Off**, **Steady**, and **Flashing** flashlight options. Existin
 
 Android requires Camera permission for torch control. The editor provides permission and app-settings buttons; enabling or testing a flashlight alarm checks permission and hardware first. If the camera becomes unavailable during an alarm, sound and tasks continue, the task screen shows a warning, and the service retries. Barcode scanning temporarily releases the torch so CameraX can use the camera, then resumes it after scanning closes or the app leaves the scanner. The service releases its torch pulse callbacks and CPU wake lock when it stops. Lock-screen, background, camera contention, and manufacturer-specific behavior still need physical-device verification.
 
-## Delivery safeguards (0.3.1)
+## Delivery safeguards (0.4.0)
 
 These changes target alarms that failed to sound after the app was closed:
 
@@ -47,6 +47,7 @@ These changes target alarms that failed to sound after the app was closed:
 - **Next occurrence first.** When an alarm fires, its next repeat is scheduled before ringing starts, so a failed start no longer stops a repeating alarm from future days.
 - **Backup alert.** If Android refuses to start the ringing service (for example, battery usage set to Restricted), an alarm-sound notification repeats until opened. Opening it starts normal ringing.
 - **Wake locks.** A short wake lock covers the hand-off from the alarm broadcast to the ringing service, and the service holds a refreshed partial wake lock for the whole ring, so the fallback beep and volume guard keep running with the screen off.
+- **Rings before first unlock.** After a reboot (including Pixel overnight update restarts), alarms are restored and ring while the phone is still locked. Alarm state lives in device-protected storage (migrated automatically from older versions after the first unlock), and the receivers and ringing service are direct-boot aware. Before unlock, imported custom sounds cannot be read, so the alarm uses the phone's default alarm sound or the built-in beep, and the notification asks you to unlock to complete your tasks.
 - **Exact-alarm permission.** On Android 13+ the app uses `USE_EXACT_ALARM`, which is granted at install and cannot be revoked (revoking exact-alarm access makes Android cancel all of an app's alarms). Android 12 still uses the Alarms & reminders setting.
 
 These paths are covered by Robolectric tests but still need physical-device verification (see the checklist).
@@ -87,7 +88,7 @@ On the phone, grant alarm notifications and full-screen alarm access using the s
 
 Times follow the phone's local time zone. Nonexistent spring-forward times move forward by the DST gap. Repeated fall-back times ring only at their first occurrence; once that has passed, the next valid day is selected. Missed alarms are scheduled for the next valid day during restoration. A future snooze keeps its stored timestamp across restoration.
 
-Reboot restoration runs after the phone is unlocked; direct-boot alarms are not implemented, so an alarm due while the phone is still locked after an overnight restart does not ring until unlock. An active ringing session is preserved across reboot and resumes through an exact alarm after unlock. Process death while ringing is recovered by the sticky foreground service and the ringing backstop; this requires device verification. Force stop cancels scheduled alarms until the app is opened again. Power-off, alarm volume zero, and manufacturer power-management rules can still prevent delivery.
+Reboot restoration runs at locked boot and again after unlock; alarms ring before the first unlock using the default sound. An active ringing session is preserved across reboot and resumes through an exact alarm shortly after boot. Process death while ringing is recovered by the sticky foreground service and the ringing backstop; this requires device verification. Force stop cancels scheduled alarms until the app is opened again. Power-off, alarm volume zero, and manufacturer power-management rules can still prevent delivery.
 
 Task answers are checked by the native engine against the active session and challenge ID. Camera results are validated as values, not cryptographic proofs of scanning. This is not an anti-tampering system. Alarm definitions and in-flight sessions use a private, versioned SharedPreferences JSON store. Backup is disabled to prevent restoring sessions and private sound paths onto another phone. Unused imported sounds are retained until app data is cleared; library management and cleanup are follow-up work.
 

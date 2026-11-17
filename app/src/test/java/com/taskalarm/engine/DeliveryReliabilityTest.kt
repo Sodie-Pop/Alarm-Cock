@@ -32,7 +32,7 @@ class DeliveryReliabilityTest {
 
   @Before fun setup() {
     context = RuntimeEnvironment.getApplication()
-    context.getSharedPreferences("task_alarm_v1", 0).edit().clear().commit()
+    context.createDeviceProtectedStorageContext().getSharedPreferences("task_alarm_v1", 0).edit().clear().commit()
     ShadowPowerManager.clearWakeLocks()
     store = AlarmStore(context)
     manager = context.getSystemService(AlarmManager::class.java)

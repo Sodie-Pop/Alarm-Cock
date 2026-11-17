@@ -86,7 +86,7 @@ class RingingService : Service() {
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     val notification = NotificationCompat.Builder(this, CHANNEL)
       .setSmallIcon(android.R.drawable.ic_lock_idle_alarm).setContentTitle(alarm.getString("label"))
-      .setContentText("Open to complete your alarm tasks").setCategory(NotificationCompat.CATEGORY_ALARM)
+      .setContentText(if (getSystemService(UserManager::class.java).isUserUnlocked) "Open to complete your alarm tasks" else "Unlock your phone to complete your alarm tasks").setCategory(NotificationCompat.CATEGORY_ALARM)
       .setPriority(NotificationCompat.PRIORITY_MAX).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
       .setOngoing(true).setContentIntent(open).setFullScreenIntent(open, true).build()
     val serviceType = if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK else 0

@@ -29,14 +29,17 @@ be called out as needing on-device verification; add cases to `docs/device-testi
 
 - 2-space indent, compact Kotlin style; match the surrounding file.
 - `engine/` owns scheduling, persistence and ringing; `app/` is UI. UI calls into `AlarmEngine` only.
-- State is JSON in SharedPreferences (`AlarmStore`, file `task_alarm_v1`). Every read-modify-write of the store
+- State is JSON in SharedPreferences (`AlarmStore`, file `task_alarm_v1`) in **device-protected storage** so it is
+  readable before first unlock. Always go through `AlarmStore`/`AlarmStore.storage(context)`, never
+  `context.getSharedPreferences` directly; tests clear `createDeviceProtectedStorageContext()` prefs. Every read-modify-write of the store
   happens inside `synchronized(AlarmEngine.LOCK)`. Keep new fields backward compatible (`opt*` with defaults) —
   existing installs upgrade in place and the README promises old alarms keep working.
 - Alarms are scheduled with `AlarmManager.setAlarmClock`; PendingIntents are distinguished by data URI
   (`taskalarm://alarm/<id>`, `taskalarm://wake/<session>/<phase>`, `taskalarm://ringing/backstop`), all with
   request code 0.
-- Delivery safeguards (re-arm on launch, ringing backstop, fallback alert, wake locks) are covered by
-  `DeliveryReliabilityTest`; keep them intact when touching `fire()`, `ring()`, `finish()` or `RingingService`.
+- Delivery safeguards (re-arm on launch, ringing backstop, fallback alert, wake locks, direct boot) are covered by
+  `DeliveryReliabilityTest` and `DirectBootTest`; delivery components must stay `directBootAware` and must not
+  touch credential-protected storage or `getLaunchIntentForPackage` (use `AlarmEngine.launchIntent`); keep them intact when touching `fire()`, `ring()`, `finish()` or `RingingService`.
 - Engine tests drive `AlarmEngine` with an injectable clock (`AlarmEngine(context) { time }`) and Robolectric
   shadows for `AlarmManager`/notifications. Add a test for every engine behaviour change.
 
