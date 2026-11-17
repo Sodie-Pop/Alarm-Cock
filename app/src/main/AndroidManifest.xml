@@ -2,7 +2,10 @@
   <uses-permission android:name="android.permission.CAMERA" />
   <uses-feature android:name="android.hardware.camera.any" android:required="false" />
   <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
-  <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+  <!-- Alarm clocks may hold USE_EXACT_ALARM (API 33+): granted at install and not revocable, so the OS cannot
+       silently cancel every scheduled alarm by revoking it. SCHEDULE_EXACT_ALARM covers API 31-32. -->
+  <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+  <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
   <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />

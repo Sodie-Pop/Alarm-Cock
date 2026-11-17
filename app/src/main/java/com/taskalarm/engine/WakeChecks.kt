@@ -179,7 +179,7 @@ internal class WakeChecks(
         put("totalTasks", getJSONObject("alarm").optJSONArray("wakeTasks")?.length() ?: 0)
       }
     }
-  fun restore() {
+  fun restore(fromBoot: Boolean = true) {
     if (Build.VERSION.SDK_INT >= 31 && !alarms.canScheduleExactAlarms()) return
     store.checks().forEach { record ->
       // Boot receivers cannot start a media FGS directly; an exact user alarm can.
@@ -189,7 +189,7 @@ internal class WakeChecks(
         exact(record, "due", record.getLong("dueAt"))
         reminderAt(record)?.let {
           if (now() < it) exact(record, "reminder", it)
-          else remind(record.getString("sessionId"), restore = true)
+          else remind(record.getString("sessionId"), restore = fromBoot)
         }
       }
       else if (now() < record.getLong("deadlineAt")) due(record.getString("sessionId"))

@@ -8,9 +8,13 @@ import android.Manifest
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.util.UUID
 
 internal class AlarmEngine(private val context: Context, private val now: () -> Long = System::currentTimeMillis) {
@@ -19,6 +23,9 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
   private val wakeChecks by lazy { WakeChecks(context, now, ::retryWake) }
   private fun receiver(id: String) = PendingIntent.getBroadcast(context, 0,
     Intent(context, AlarmReceiver::class.java).setData(Uri.parse("taskalarm://alarm/$id")),
+    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+  private fun backstopIntent() = PendingIntent.getBroadcast(context, 0,
+    Intent(context, AlarmReceiver::class.java).setData(Uri.parse("taskalarm://ringing/backstop")),
     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
   fun readiness(): JSONObject {
@@ -106,7 +113,8 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
 
   private fun next(alarm: JSONObject): Long {
     val days = alarm.getJSONArray("days")
-    return Timing.next(alarm.getInt("hour"), alarm.getInt("minute"), (0 until days.length()).map { days.getInt(it) }.toSet())
+    return Timing.next(alarm.getInt("hour"), alarm.getInt("minute"), (0 until days.length()).map { days.getInt(it) }.toSet(),
+      ZonedDateTime.ofInstant(Instant.ofEpochMilli(now()), ZoneId.systemDefault()))
   }
   private fun schedule(alarm: JSONObject) {
     val show = PendingIntent.getActivity(context, 0, launchIntent(), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -119,11 +127,14 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
     val alarm = store.find(id) ?: return@synchronized
     if (!alarm.getBoolean("enabled") || alarm.optLong("nextAt", Long.MAX_VALUE) > now() + 2000) return@synchronized
     wakeChecks.cancelForAlarm(id)
-    enqueue(alarm, false, alarm.optBoolean("wakeRetry")); ring()
-    alarm.remove("snoozed"); alarm.remove("wakeRetry")
-    if (alarm.getJSONArray("days").length() > 0) { alarm.put("nextAt", next(alarm)); schedule(alarm) }
-    else { alarm.put("enabled", false); alarm.remove("nextAt") }
-    store.put(alarm)
+    enqueue(alarm, false, alarm.optBoolean("wakeRetry"))
+    // Arm the next occurrence before starting media: a failed service start must not end a repeating alarm.
+    try {
+      alarm.remove("snoozed"); alarm.remove("wakeRetry")
+      if (alarm.getJSONArray("days").length() > 0) { alarm.put("nextAt", next(alarm)); schedule(alarm) }
+      else { alarm.put("enabled", false); alarm.remove("nextAt") }
+      store.put(alarm)
+    } finally { ring() }
   }
 
   fun test(json: String) = synchronized(LOCK) {
@@ -222,7 +233,10 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
       } else wakeChecks.schedule(base)
     }
     sessions.removeAt(0); store.sessions(sessions)
-    if (sessions.isEmpty()) context.stopService(Intent(context, RingingService::class.java)) else ring()
+    if (sessions.isEmpty()) {
+      cancelBackstop(); FallbackAlert.cancel(context)
+      context.stopService(Intent(context, RingingService::class.java))
+    } else ring()
   }
 
   fun restore(action: String?) = synchronized(LOCK) {
@@ -232,7 +246,48 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
       schedule(alarm); store.put(alarm)
     }
     wakeChecks.restore()
+    // Boot receivers cannot start a media FGS directly; an exact alarm can resume an interrupted ring.
+    if (store.sessions().isNotEmpty()) armBackstop(1000)
   }
-  fun ring() { context.startForegroundService(Intent(context, RingingService::class.java)) }
-  companion object { val LOCK = Any() }
+
+  /**
+   * Re-registers platform timers from the store. Android drops every alarm on force stop without notifying the
+   * app, so this runs on each app launch. Unlike [restore], stored times are kept: an occurrence that became due
+   * moments ago is scheduled as-is (AlarmManager delivers it immediately) instead of skipping to the next day.
+   */
+  fun rearm() = synchronized(LOCK) {
+    if (!readiness().getBoolean("exactAlarms")) return@synchronized
+    for (alarm in store.alarms().filter { it.getBoolean("enabled") }) {
+      if (alarm.optLong("nextAt", 0) < now() - REARM_GRACE_MS) alarm.remove("snoozed")
+      if (!alarm.has("nextAt") || alarm.getLong("nextAt") < now() - REARM_GRACE_MS) alarm.put("nextAt", next(alarm))
+      schedule(alarm); store.put(alarm)
+    }
+    wakeChecks.restore(fromBoot = false)
+  }
+
+  /** Starts (or refreshes) ringing. If Android refuses the service, an alarm-sound notification still alerts. */
+  fun ring() {
+    armBackstop()
+    try { context.startForegroundService(Intent(context, RingingService::class.java)) }
+    catch (error: RuntimeException) {
+      Log.e("TaskAlarm", "Unable to start ringing service", error)
+      FallbackAlert.show(context, store.sessions().firstOrNull()?.getJSONObject("alarm")?.optString("label") ?: "Alarm")
+    }
+  }
+
+  /** Exact alarm that restarts ringing if the process dies mid-alarm. The ringing service keeps pushing it back. */
+  fun armBackstop(delayMs: Long = BACKSTOP_MS) {
+    if (Build.VERSION.SDK_INT >= 31 && !manager.canScheduleExactAlarms()) return
+    val show = PendingIntent.getActivity(context, 0, launchIntent(), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    try { manager.setAlarmClock(AlarmManager.AlarmClockInfo(now() + delayMs, show), backstopIntent()) }
+    catch (error: SecurityException) { Log.e("TaskAlarm", "Unable to arm ringing backstop", error) }
+  }
+  fun cancelBackstop() = manager.cancel(backstopIntent())
+  fun backstop() = synchronized(LOCK) { if (store.sessions().isNotEmpty()) ring() }
+
+  companion object {
+    val LOCK = Any()
+    const val BACKSTOP_MS = 60_000L
+    const val REARM_GRACE_MS = 60_000L
+  }
 }

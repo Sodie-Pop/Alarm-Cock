@@ -33,7 +33,10 @@ be called out as needing on-device verification; add cases to `docs/device-testi
   happens inside `synchronized(AlarmEngine.LOCK)`. Keep new fields backward compatible (`opt*` with defaults) —
   existing installs upgrade in place and the README promises old alarms keep working.
 - Alarms are scheduled with `AlarmManager.setAlarmClock`; PendingIntents are distinguished by data URI
-  (`taskalarm://alarm/<id>`, `taskalarm://wake/<session>/<phase>`), all with request code 0.
+  (`taskalarm://alarm/<id>`, `taskalarm://wake/<session>/<phase>`, `taskalarm://ringing/backstop`), all with
+  request code 0.
+- Delivery safeguards (re-arm on launch, ringing backstop, fallback alert, wake locks) are covered by
+  `DeliveryReliabilityTest`; keep them intact when touching `fire()`, `ring()`, `finish()` or `RingingService`.
 - Engine tests drive `AlarmEngine` with an injectable clock (`AlarmEngine(context) { time }`) and Robolectric
   shadows for `AlarmManager`/notifications. Add a test for every engine behaviour change.
 

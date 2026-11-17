@@ -20,6 +20,18 @@ class RingingService : Service() {
   private var restoreVolume: Int? = null
   private var scannerActive = false
   private var flashlightWakeLock: PowerManager.WakeLock? = null
+  internal val ringingWakeLock by lazy {
+    getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "TaskAlarm:ringing")
+      .apply { setReferenceCounted(false) }
+  }
+  /** While ringing: keep the CPU awake (fallback beep and volume guard are Handler loops) and push back the backstop. */
+  private val heartbeat = object : Runnable {
+    override fun run() {
+      ringingWakeLock.acquire(WAKE_LOCK_MS)
+      try { AlarmEngine(this@RingingService).armBackstop() } catch (_: RuntimeException) { }
+      handler.postDelayed(this, HEARTBEAT_MS)
+    }
+  }
   private val handler = Handler(Looper.getMainLooper())
   private val flashlight by lazy { AlarmFlashlight(handler, CameraTorch(this)::set) { blocked ->
     synchronized(AlarmEngine.LOCK) {
@@ -64,7 +76,7 @@ class RingingService : Service() {
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     val session = synchronized(AlarmEngine.LOCK) { AlarmStore(this).sessions().firstOrNull() }
-    if (session == null) { releaseFlashlight(); stopSelf(); return START_NOT_STICKY }
+    if (session == null) { releaseFlashlight(); stopHeartbeat(); stopSelf(); return START_NOT_STICKY }
     val alarm = session.getJSONObject("alarm")
     val manager = getSystemService(NotificationManager::class.java)
     manager.createNotificationChannel(NotificationChannel(CHANNEL, "Ringing alarms", NotificationManager.IMPORTANCE_HIGH).apply {
@@ -79,6 +91,8 @@ class RingingService : Service() {
       .setOngoing(true).setContentIntent(open).setFullScreenIntent(open, true).build()
     val serviceType = if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK else 0
     ServiceCompat.startForeground(this, 1001, notification, serviceType)
+    FallbackAlert.cancel(this)
+    handler.removeCallbacks(heartbeat); heartbeat.run()
     if (intent?.hasExtra("scannerActive") == true) scannerActive = intent.getBooleanExtra("scannerActive", false)
     if (sessionId != session.getString("sessionId")) {
       releaseFlashlight()
@@ -145,6 +159,27 @@ class RingingService : Service() {
     flashlightWakeLock?.let { if (it.isHeld) it.release() }; flashlightWakeLock = null
   }
 
-  override fun onDestroy() { releaseFlashlight(); releaseAudio(); super.onDestroy() }
-  companion object { const val CHANNEL = "task-alarm-ringing-v1" }
+  private fun stopHeartbeat() {
+    handler.removeCallbacks(heartbeat)
+    if (ringingWakeLock.isHeld) ringingWakeLock.release()
+  }
+
+  override fun onTaskRemoved(rootIntent: Intent?) {
+    // Some devices kill the process shortly after the task is swiped away; ring again soon if that happens.
+    if (synchronized(AlarmEngine.LOCK) { AlarmStore(this).sessions().isNotEmpty() }) AlarmEngine(this).armBackstop(TASK_REMOVED_BACKSTOP_MS)
+    super.onTaskRemoved(rootIntent)
+  }
+
+  override fun onDestroy() {
+    stopHeartbeat(); releaseFlashlight(); releaseAudio()
+    // Keep the backstop while an alarm is still active; otherwise clear one a late heartbeat may have re-armed.
+    if (synchronized(AlarmEngine.LOCK) { AlarmStore(this).sessions().isEmpty() }) AlarmEngine(this).cancelBackstop()
+    super.onDestroy()
+  }
+  companion object {
+    const val CHANNEL = "task-alarm-ringing-v1"
+    const val HEARTBEAT_MS = 30_000L
+    const val WAKE_LOCK_MS = 10 * 60_000L
+    const val TASK_REMOVED_BACKSTOP_MS = 5_000L
+  }
 }

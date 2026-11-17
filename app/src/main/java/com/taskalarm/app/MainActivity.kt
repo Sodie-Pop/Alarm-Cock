@@ -44,6 +44,8 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     volumeControlStream = AudioManager.STREAM_ALARM
+    // Force stop (and some OEM task killers) cancel every platform alarm without telling the app.
+    try { engine.rearm() } catch (error: RuntimeException) { android.util.Log.e("TaskAlarm", "Unable to re-arm alarms", error) }
     updateAlarmWindow()
     setContent { TaskAlarmApp(this) }
   }

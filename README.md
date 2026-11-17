@@ -38,6 +38,19 @@ Each alarm has **Off**, **Steady**, and **Flashing** flashlight options. Existin
 
 Android requires Camera permission for torch control. The editor provides permission and app-settings buttons; enabling or testing a flashlight alarm checks permission and hardware first. If the camera becomes unavailable during an alarm, sound and tasks continue, the task screen shows a warning, and the service retries. Barcode scanning temporarily releases the torch so CameraX can use the camera, then resumes it after scanning closes or the app leaves the scanner. The service releases its torch pulse callbacks and CPU wake lock when it stops. Lock-screen, background, camera contention, and manufacturer-specific behavior still need physical-device verification.
 
+## Delivery safeguards (0.3.1)
+
+These changes target alarms that failed to sound after the app was closed:
+
+- **Re-arm on launch.** Android cancels every scheduled alarm when an app is force-stopped (some phones also do this when an app is swiped away) and does not tell the app. Opening the app now re-registers all enabled alarms and wake-up check timers. An occurrence that became due within the last minute is still delivered; older missed occurrences move to their next valid time without ringing.
+- **Ringing backstop.** While an alarm is ringing, an exact alarm stays armed about a minute ahead and restarts ringing if the process is killed. The ringing service pushes it back every 30 seconds while it is alive, and swiping the app away shortens it to five seconds. Only dismissing or snoozing cancels it. After a reboot during ringing, ringing resumes shortly after unlock.
+- **Next occurrence first.** When an alarm fires, its next repeat is scheduled before ringing starts, so a failed start no longer stops a repeating alarm from future days.
+- **Backup alert.** If Android refuses to start the ringing service (for example, battery usage set to Restricted), an alarm-sound notification repeats until opened. Opening it starts normal ringing.
+- **Wake locks.** A short wake lock covers the hand-off from the alarm broadcast to the ringing service, and the service holds a refreshed partial wake lock for the whole ring, so the fallback beep and volume guard keep running with the screen off.
+- **Exact-alarm permission.** On Android 13+ the app uses `USE_EXACT_ALARM`, which is granted at install and cannot be revoked (revoking exact-alarm access makes Android cancel all of an app's alarms). Android 12 still uses the Alarms & reminders setting.
+
+These paths are covered by Robolectric tests but still need physical-device verification (see the checklist).
+
 ## Build and run
 
 Use Android Studio with Java 17 or newer, Android SDK 37, and an Android 8.0+ device (API 26+). Gradle runs on Java 21 in the retained cloud environment and uses a Java 17 compiler toolchain. The project has no Node, React Native, Expo, or Metro dependency.
@@ -55,7 +68,7 @@ For the retained cloud tools, activate `. /workspace/.onboarding/env.sh` in each
 CI=1 python3 /workspace/.onboarding/gradle.py :app:assembleDebug :app:testDebugUnitTest --max-workers=2 --console=plain --no-daemon
 ```
 
-On the phone, grant Alarms & reminders, alarm notifications, and full-screen alarm access using the setup card. The card also appears in the editor so granting access preserves the draft. Grant Camera for flashlight alarms or when enrolling or completing a barcode task. Set an audible alarm volume and use **Test sound & tasks now** first.
+On the phone, grant alarm notifications and full-screen alarm access using the setup card (Android 12 also needs Alarms & reminders). The card also appears in the editor so granting access preserves the draft. Grant Camera for flashlight alarms or when enrolling or completing a barcode task. Set an audible alarm volume and use **Test sound & tasks now** first.
 
 ## Project map
 
@@ -74,7 +87,7 @@ On the phone, grant Alarms & reminders, alarm notifications, and full-screen ala
 
 Times follow the phone's local time zone. Nonexistent spring-forward times move forward by the DST gap. Repeated fall-back times ring only at their first occurrence; once that has passed, the next valid day is selected. Missed alarms are scheduled for the next valid day during restoration. A future snooze keeps its stored timestamp across restoration.
 
-Reboot restoration runs after the phone is unlocked; direct-boot alarms are not implemented. An active ringing session is preserved across reboot but does not automatically restart media playback from the boot receiver. Opening the app resumes it. The sticky foreground service is intended to recover ordinary process death; this requires device verification. Android force stop, power-off, revoked permissions, alarm volume zero, and manufacturer power-management rules can prevent delivery.
+Reboot restoration runs after the phone is unlocked; direct-boot alarms are not implemented, so an alarm due while the phone is still locked after an overnight restart does not ring until unlock. An active ringing session is preserved across reboot and resumes through an exact alarm after unlock. Process death while ringing is recovered by the sticky foreground service and the ringing backstop; this requires device verification. Force stop cancels scheduled alarms until the app is opened again. Power-off, alarm volume zero, and manufacturer power-management rules can still prevent delivery.
 
 Task answers are checked by the native engine against the active session and challenge ID. Camera results are validated as values, not cryptographic proofs of scanning. This is not an anti-tampering system. Alarm definitions and in-flight sessions use a private, versioned SharedPreferences JSON store. Backup is disabled to prevent restoring sessions and private sound paths onto another phone. Unused imported sounds are retained until app data is cleared; library management and cleanup are follow-up work.
 
