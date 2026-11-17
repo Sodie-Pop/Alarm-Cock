@@ -38,6 +38,17 @@ Each alarm has **Off**, **Steady**, and **Flashing** flashlight options. Existin
 
 Android requires Camera permission for torch control. The editor provides permission and app-settings buttons; enabling or testing a flashlight alarm checks permission and hardware first. If the camera becomes unavailable during an alarm, sound and tasks continue, the task screen shows a warning, and the service retries. Barcode scanning temporarily releases the torch so CameraX can use the camera, then resumes it after scanning closes or the app leaves the scanner. The service releases its torch pulse callbacks and CPU wake lock when it stops. Lock-screen, background, camera contention, and manufacturer-specific behavior still need physical-device verification.
 
+## Redesigned interface (0.4.0)
+
+The UI was rebuilt around a "night to dawn" Material 3 theme that follows the system light/dark setting; the ringing, wake-up check and scanner screens are always dark.
+
+- **Home:** shows when the next alarm rings ("Next alarm in 7 hr 57 min"). Alarm cards show the time in the phone's 12/24-hour format, the repeat summary, and pills for dismiss tasks, snooze, wake-up check and flashlight. Tap a card to edit; the ⋮ menu has Test now and Delete. Missing permissions appear as one setup card.
+- **Editor:** tap the large time to open a clock dial (or type it). Days are round toggles. Tasks are short rows; tap one to change difficulty, rounds or barcode in a bottom sheet, and **Add task** offers math, text or barcode. Sound, flashlight, volume and wake-up check settings are compact rows. **Test** and **Save alarm** stay pinned at the bottom, and saving turns the alarm on and confirms when it will ring.
+- **Ringing:** a large live clock with Dismiss and Snooze anchored within thumb reach, each listing its tasks. While solving, a segmented bar shows progress across tasks and rounds; wrong answers show inline instead of in a dialog, and math uses the number keyboard.
+- **Wake-up check:** a countdown ring with a large "Yes, I'm up" button (or the confirmation tasks).
+
+Icons are Material Symbols (Apache License 2.0) stored as vector drawables in `app/src/main/res/drawable/ic_*.xml`.
+
 ## Delivery safeguards (0.4.0)
 
 These changes target alarms that failed to sound after the app was closed:
@@ -76,11 +87,14 @@ On the phone, grant alarm notifications and full-screen alarm access using the s
 | Location | Responsibility |
 | --- | --- |
 | `app/src/main/java/com/taskalarm/app/MainActivity.kt` | Android lifecycle, lock-screen flags, system sound/document pickers, permissions |
-| `app/src/main/java/com/taskalarm/app/TaskAlarmApp.kt` | Compose alarm list, editor, task previews, ringing and snooze/dismiss flows |
+| `app/src/main/java/com/taskalarm/app/TaskAlarmApp.kt` | Compose state owner and navigation between screens |
+| `app/src/main/java/com/taskalarm/app/{Home,Editor}Screen.kt`, `RingingScreens.kt` | Alarm list, editor and sheets, ringing and wake-up check screens |
+| `app/src/main/java/com/taskalarm/app/{Theme,Components,Format}.kt` | Colors and type, shared UI pieces, time/duration/task text |
 | `app/src/main/java/com/taskalarm/app/AlarmDraft.kt` | Editor models and task examples |
 | `app/src/main/java/com/taskalarm/app/BarcodeCamera.kt` | CameraX lifecycle and bundled ML Kit scanning |
 | `app/src/main/java/com/taskalarm/engine/` | Scheduling, persistence, task checking, sound processing, ringing service |
-| `app/src/test/java/com/taskalarm/engine/` | JVM math/text/barcode matching, DST scheduling, and PCM/WAV tests |
+| `app/src/test/java/com/taskalarm/engine/` | JVM math/text/barcode matching, DST scheduling, delivery safeguards, direct boot, and PCM/WAV tests |
+| `app/src/test/java/com/taskalarm/app/ScreenshotTest.kt` | Renders every screen (light and dark) to `app/build/screenshots/` |
 | `docs/device-testing.md` | Physical-device acceptance checklist |
 | `docs/roadmap.md` | Downloadable tasks, JavaScript games, sound packs, and release work |
 

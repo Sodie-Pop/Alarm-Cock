@@ -54,4 +54,6 @@ dependencies {
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.16.1")
+    testImplementation("androidx.compose.ui:ui-test-junit4:1.10.5")
+    debugImplementation("androidx.compose.ui:ui-test-manifest:1.10.5")
 }

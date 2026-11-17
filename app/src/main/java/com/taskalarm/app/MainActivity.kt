@@ -12,6 +12,8 @@ import android.provider.Settings
 import android.view.WindowManager
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
@@ -42,6 +44,7 @@ class MainActivity : ComponentActivity() {
   }
 
   override fun onCreate(savedInstanceState: Bundle?) {
+    enableEdgeToEdge()
     super.onCreate(savedInstanceState)
     volumeControlStream = AudioManager.STREAM_ALARM
     // Force stop (and some OEM task killers) cancel every platform alarm without telling the app.
@@ -61,6 +64,11 @@ class MainActivity : ComponentActivity() {
     if (session?.optBoolean("muted") == true) {
       try { engine.setMuted(session.getString("sessionId"), false) } catch (_: RuntimeException) { }
     }
+  }
+  /** Ringing, wake-up check and scanner screens are always dark, so they need light system-bar icons. */
+  internal fun setImmersiveBars(dark: Boolean) {
+    if (dark) enableEdgeToEdge(SystemBarStyle.dark(android.graphics.Color.TRANSPARENT), SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
+    else enableEdgeToEdge()
   }
   internal fun updateAlarmWindow() {
     val store = AlarmStore(this)

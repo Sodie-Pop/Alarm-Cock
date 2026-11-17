@@ -25,6 +25,16 @@ There is no phone or emulator here. Unit + Robolectric tests (`app/src/test`, pi
 the only automated check. Anything touching delivery, lock screen, Doze, reboot, audio, camera or OEM behaviour must
 be called out as needing on-device verification; add cases to `docs/device-testing.md` when behaviour changes.
 
+## UI review without a device
+
+`ScreenshotTest` renders every screen in both themes with Robolectric native graphics into `app/build/screenshots/*.png`
+(run `./gradlew :app:testDebugUnitTest --tests '*ScreenshotTest*'`). Look at them after any UI change, and add a capture
+for new screens or states. Screens are plain composables taking state + callbacks so they can be rendered with sample
+data; keep `MainActivity`/engine access in `TaskAlarmApp.kt`. Dialogs and bottom sheets open in separate windows, so
+render their content composables (`TaskSheet`, `SoundSheet`, …) directly. Colors come from `TaskAlarmTheme`; use
+`MaterialTheme.colorScheme` roles rather than literals. Icons are Material Symbols vector drawables (`R.drawable.ic_*`),
+not the material-icons-extended library.
+
 ## Code conventions
 
 - 2-space indent, compact Kotlin style; match the surrounding file.
