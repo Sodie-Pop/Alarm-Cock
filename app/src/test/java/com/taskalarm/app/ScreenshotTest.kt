@@ -112,6 +112,21 @@ class ScreenshotTest {
     capture("wake-tasks", true) { WakeCheckScreen(wakeTasks, false, null, now, {}, {}, {}, {}) }
     val limited = JSONObject(ringing.toString()).put("alarm", morning.copy(snoozeLimit = 3, vibrate = true).json().put("snoozeCount", 1)).put("escalated", true).put("escalationToneName", "Pulse")
     capture("ringing-limit", true) { RingingScreen(limited, false, null, now, {}, {}, {}, {}, {}) }
+    val games = morning.copy(dismissTasks = listOf(TaskDraft(kind = "memory", difficulty = "medium"), TaskDraft(kind = "breakout", gameSeconds = 60),
+      TaskDraft(kind = "maze", controlMode = "touch", difficulty = "hard"), TaskDraft(kind = "walk", stepTarget = 30), TaskDraft(kind = "light")))
+    fun gameSession(index: Int, kind: String) = JSONObject(ringing.toString()).put("alarm", games.json()).put("action", "dismiss")
+      .put("taskIndex", index).put("round", 1).put("kind", kind).put("challengeId", "g$index").put("sequence", "13242")
+      .put("prompt", when (kind) { "breakout" -> "Keep the ball in play for 60 seconds"; "maze" -> "Reach each checkpoint, then the exit"
+        "walk" -> "Walk 30 steps"; "light" -> "Find 200 lux of light and hold it for 3 seconds"; else -> "Watch 5 tiles light up, then repeat the order" })
+    capture("ringing-memory", true) { RingingScreen(gameSession(0, "memory"), false, null, now, {}, {}, {}, {}, {}) }
+    for (dark in listOf(true, false)) {
+      capture("sheet-breakout", dark) { Box(Modifier.padding(top = 24.dp)) { TaskSheet(games.dismissTasks[1], {}, {}, {}, {}) } }
+      capture("sheet-light", dark) { Box(Modifier.padding(top = 24.dp)) { TaskSheet(games.dismissTasks[4], {}, {}, {}, {}) } }
+    }
+    capture("ringing-breakout", true, frozen = true) { RingingScreen(gameSession(1, "breakout"), false, null, now, {}, {}, {}, {}, {}) }
+    capture("ringing-maze", true, frozen = true) { RingingScreen(gameSession(2, "maze"), false, null, now, {}, {}, {}, {}, {}) }
+    capture("ringing-walk", true, frozen = true) { RingingScreen(gameSession(3, "walk"), false, null, now, {}, {}, {}, {}, {}) }
+    capture("ringing-light", true, frozen = true) { RingingScreen(gameSession(4, "light"), false, null, now, {}, {}, {}, {}, {}) }
     val moving = JSONObject(ringing.toString()).put("alarm", morning.copy(movingDismiss = true).json())
     capture("ringing-moving", true, frozen = true) { RingingScreen(moving, false, null, now, {}, {}, {}, {}, {}) }
   }

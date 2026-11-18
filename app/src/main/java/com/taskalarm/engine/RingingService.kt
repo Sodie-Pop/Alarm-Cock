@@ -121,13 +121,15 @@ class RingingService : Service() {
       if (toneSlot < 0) playWithFallback(chosen)
     }
     val flashlightMode = alarm.optString("flashlightMode", "off")
-    if (flashlightMode != "off" && !scannerActive) {
+    // The camera scanner needs the torch, and a light task would just measure the flashlight.
+    val torchPaused = scannerActive || session.optString("kind") == "light"
+    if (flashlightMode != "off" && !torchPaused) {
       if (flashlightWakeLock == null) flashlightWakeLock = getSystemService(PowerManager::class.java)
         .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "TaskAlarm:flashlight").apply { acquire() }
     } else {
       flashlightWakeLock?.let { if (it.isHeld) it.release() }; flashlightWakeLock = null
     }
-    flashlight.update(flashlightMode, scannerActive)
+    flashlight.update(flashlightMode, torchPaused)
     muted = session.optBoolean("muted")
     player?.setVolume(if (muted) 0f else 1f, if (muted) 0f else 1f)
     if (muted) tone?.stopTone()

@@ -107,9 +107,10 @@ internal fun Stepper(label: String, value: Int, display: String, canDecrease: Bo
 
 /** Labelled, horizontally scrolling single-choice chips. */
 @Composable
-internal fun <T> ChipChoice(label: String, options: List<T>, selected: T, text: (T) -> String, enabled: Boolean = true, onSelect: (T) -> Unit) {
-  Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
-  Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+internal fun <T> ChipChoice(label: String, options: List<T>, selected: T, text: (T) -> String, enabled: Boolean = true, inset: Dp = 16.dp,
+  onSelect: (T) -> Unit) {
+  Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = inset, top = 8.dp))
+  Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = inset, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
     options.forEach { option -> FilterChip(selected == option, { onSelect(option) }, label = { Text(text(option)) }, enabled = enabled) }
   }
 }

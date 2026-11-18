@@ -32,6 +32,7 @@ class MainActivity : ComponentActivity() {
   private var soundError: ((String) -> Unit)? = null
   private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
   private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+  private val activityPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
   private val documentPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
     if (uri != null) importSound(uri)
   }
@@ -88,6 +89,7 @@ class MainActivity : ComponentActivity() {
   override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean = if (guardVolumeKey(keyCode)) true else super.onKeyUp(keyCode, event)
   internal fun openAccess(kind: String) {
     if (kind == "camera") { cameraPermission.launch(Manifest.permission.CAMERA); return }
+    if (kind == "activity") { if (Build.VERSION.SDK_INT >= 29) activityPermission.launch(Manifest.permission.ACTIVITY_RECOGNITION); return }
     if (kind in listOf("notifications", "wakeNotifications") && Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
       notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS); return
     }

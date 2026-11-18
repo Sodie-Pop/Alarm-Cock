@@ -108,7 +108,7 @@ internal class WakeChecks(
       if (record.getJSONObject("alarm").optString("wakeMode", "yes_no") == "tasks") {
         val alarm = record.getJSONObject("alarm")
         if (alarm.optBoolean("shuffleTasks")) alarm.put("wakeTasks", TaskOrder.shuffled(alarm.getJSONArray("wakeTasks")))
-        SessionTasks.start(record, alarm.getJSONArray("wakeTasks"))
+        SessionTasks.start(record, alarm.getJSONArray("wakeTasks"), now())
       }
       put(record)
     }
@@ -150,11 +150,22 @@ internal class WakeChecks(
   fun submit(id: String, challengeId: String, answer: String): Boolean {
     val record = waiting(id)
     check(record.getJSONObject("alarm").optString("wakeMode", "yes_no") == "tasks")
-    return when (SessionTasks.submit(record, record.getJSONObject("alarm").getJSONArray("wakeTasks"), challengeId, answer)) {
-      SessionTasks.Result.WRONG -> false
-      SessionTasks.Result.NEXT -> { put(record); true }
-      SessionTasks.Result.COMPLETE -> { remove(record); true }
-    }
+    return settle(record, SessionTasks.submit(record, record.getJSONObject("alarm").getJSONArray("wakeTasks"), challengeId, answer, now()))
+  }
+  fun complete(id: String, challengeId: String): Boolean {
+    val record = waiting(id)
+    check(record.getJSONObject("alarm").optString("wakeMode", "yes_no") == "tasks")
+    return settle(record, SessionTasks.complete(record, record.getJSONObject("alarm").getJSONArray("wakeTasks"), challengeId, now()))
+  }
+  fun fallback(id: String, challengeId: String) {
+    val record = waiting(id)
+    SessionTasks.fallback(record, record.getJSONObject("alarm").getJSONArray("wakeTasks"), challengeId, now())
+    put(record)
+  }
+  private fun settle(record: JSONObject, result: SessionTasks.Result) = when (result) {
+    SessionTasks.Result.WRONG -> false
+    SessionTasks.Result.NEXT -> { put(record); true }
+    SessionTasks.Result.COMPLETE -> { remove(record); true }
   }
   fun deadline(id: String) {
     val record = store.checks().find { it.getString("sessionId") == id } ?: return

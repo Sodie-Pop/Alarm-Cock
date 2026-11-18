@@ -10,18 +10,36 @@ data class TaskDraft(
   val difficulty: String = "easy",
   val rounds: Int = 1,
   val barcodeMode: String = "any",
-  val barcode: String = ""
+  val barcode: String = "",
+  /** Breakout: seconds of active play per round. */
+  val gameSeconds: Int = 60,
+  /** Walking: steps per round. */
+  val stepTarget: Int = 20,
+  /** Light: brightness to reach and how long to hold it. */
+  val lightLux: Int = 200,
+  val lightHoldSeconds: Int = 3,
+  /** Maze: "tilt" or "touch". */
+  val controlMode: String = "tilt",
+  /** Walking, light and tilt maze: task offered if the sensor is unavailable ("math" or "text"). */
+  val fallbackKind: String = "math",
 ) {
   fun json() = JSONObject().put("id", id).put("kind", kind).put("difficulty", difficulty).put("rounds", rounds)
-    .put("barcodeMode", barcodeMode).put("barcode", barcode)
-  val name get() = when (kind) { "text" -> "Type random text"; "math" -> "Solve math"; else -> "Scan a barcode" }
+    .put("barcodeMode", barcodeMode).put("barcode", barcode).put("gameSeconds", gameSeconds).put("stepTarget", stepTarget)
+    .put("lightLux", lightLux).put("lightHoldSeconds", lightHoldSeconds).put("controlMode", controlMode).put("fallbackKind", fallbackKind)
   val example get() = when (kind) {
     "text" -> when (difficulty) { "easy" -> "kefuma"; "medium" -> "K7mP3xRa9q"; else -> "R8!mQ2#vL9@pX4&s" }
+    "memory" -> when (difficulty) { "easy" -> "1 → 3 → 2"; "medium" -> "1 → 3 → 2 → 4 → 1"; else -> "1 → 3 → 2 → 4 → 1 → 2 → 3" }
     else -> when (difficulty) { "easy" -> "7 + 5 = ?"; "medium" -> "12 × 7 + 18 = ?"; else -> "(23 × 14) − (12 × 7) = ?" }
   }
+  val hasDifficulty get() = kind in listOf("text", "math", "memory", "breakout", "maze")
+  /** Kinds that can't run without a sensor, and so need a fallback. */
+  val usesSensor get() = kind == "walk" || kind == "light" || (kind == "maze" && controlMode == "tilt")
   companion object {
-    fun from(value: JSONObject) = TaskDraft(value.getString("id"), value.getString("kind"), value.getString("difficulty"),
-      value.getInt("rounds"), value.getString("barcodeMode"), value.getString("barcode"))
+    val KINDS = listOf("math", "text", "memory", "barcode", "breakout", "maze", "walk", "light")
+    fun from(value: JSONObject) = TaskDraft(value.getString("id"), value.getString("kind"), value.optString("difficulty", "easy"),
+      value.optInt("rounds", 1), value.optString("barcodeMode", "any"), value.optString("barcode"), value.optInt("gameSeconds", 60),
+      value.optInt("stepTarget", 20), value.optInt("lightLux", 200), value.optInt("lightHoldSeconds", 3),
+      value.optString("controlMode", "tilt"), value.optString("fallbackKind", "math"))
   }
 }
 

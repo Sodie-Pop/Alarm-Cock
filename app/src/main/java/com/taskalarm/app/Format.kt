@@ -62,24 +62,46 @@ internal fun nextRing(alarm: AlarmDraft, now: Long = System.currentTimeMillis())
 internal fun taskIcon(kind: String) = when (kind) {
   "text" -> R.drawable.ic_keyboard
   "math" -> R.drawable.ic_calculate
+  "memory" -> R.drawable.ic_grid_view
+  "breakout" -> R.drawable.ic_sports_esports
+  "maze" -> R.drawable.ic_route
+  "walk" -> R.drawable.ic_directions_walk
+  "light" -> R.drawable.ic_lightbulb
   else -> R.drawable.ic_qr_code_scanner
 }
 
 internal fun taskTitle(kind: String) = when (kind) {
   "text" -> "Type text"
   "math" -> "Solve math"
+  "memory" -> "Memory tiles"
+  "breakout" -> "Breakout"
+  "maze" -> "Ball maze"
+  "walk" -> "Take a walk"
+  "light" -> "Find the light"
   else -> "Scan a barcode"
 }
 
 internal fun taskBlurb(kind: String) = when (kind) {
   "text" -> "Copy a random string exactly. Wakes up your eyes."
   "math" -> "Answer arithmetic problems. Wakes up your brain."
+  "memory" -> "Watch tiles light up, then repeat the order."
+  "breakout" -> "Keep a brick-breaker game going for a set time."
+  "maze" -> "Roll a ball through checkpoints by tilting the phone."
+  "walk" -> "Walk a number of steps. Gets you moving."
+  "light" -> "Turn on the lights or open the curtains."
   else -> "Scan a product barcode or QR code. Gets you out of bed."
 }
+
+internal fun fallbackName(kind: String) = if (kind == "text") "typing text" else "math"
+internal fun secondsText(seconds: Int) = if (seconds < 60) "$seconds s" else if (seconds % 60 == 0) "${seconds / 60} min" else "${seconds / 60} min ${seconds % 60} s"
 
 internal fun roundsText(rounds: Int) = if (rounds == 1) "1 round" else "$rounds rounds"
 
 internal fun taskDetail(task: TaskDraft): String = when {
+  task.kind == "breakout" -> "${task.difficulty.replaceFirstChar(Char::uppercase)} · ${secondsText(task.gameSeconds)} · ${roundsText(task.rounds)}"
+  task.kind == "maze" -> "${task.difficulty.replaceFirstChar(Char::uppercase)} · ${if (task.controlMode == "tilt") "tilt" else "touch"} · ${roundsText(task.rounds)}"
+  task.kind == "walk" -> "${task.stepTarget} steps · ${roundsText(task.rounds)}"
+  task.kind == "light" -> "${task.lightLux} lux for ${task.lightHoldSeconds} s · ${roundsText(task.rounds)}"
   task.kind != "barcode" -> "${task.difficulty.replaceFirstChar(Char::uppercase)} · ${roundsText(task.rounds)}"
   task.barcodeMode == "specific" -> if (task.barcode.isEmpty()) "Specific barcode · not saved yet" else "Specific barcode · ${roundsText(task.rounds)}"
   else -> "Any barcode · ${roundsText(task.rounds)}"
@@ -89,6 +111,7 @@ internal fun TaskDraft.needsBarcode() = kind == "barcode" && barcodeMode == "spe
 
 /** Short "Math ×3" style label for summary pills. */
 internal fun taskPill(task: TaskDraft): String {
-  val name = when (task.kind) { "text" -> "Text"; "math" -> "Math"; else -> "Barcode" }
+  val name = when (task.kind) { "text" -> "Text"; "math" -> "Math"; "memory" -> "Memory"; "breakout" -> "Breakout"; "maze" -> "Maze"
+    "walk" -> "${task.stepTarget} steps"; "light" -> "Light"; else -> "Barcode" }
   return if (task.rounds > 1) "$name ×${task.rounds}" else name
 }

@@ -102,11 +102,15 @@ internal fun TaskAlarmApp(activity: MainActivity) {
           onAction = { action -> work { withContext(Dispatchers.IO) { activity.engine.begin(active.getString("sessionId"), action) } } },
           onSubmit = { submit(active, false, it) }, onScan = { scanAction = { submit(active, false, it) } },
           onMute = { muted -> work { withContext(Dispatchers.IO) { activity.engine.setMuted(active.getString("sessionId"), muted) } } },
-          onAnswerEdit = { answerError = null })
+          onAnswerEdit = { answerError = null },
+          onComplete = { work { withContext(Dispatchers.IO) { activity.engine.complete(active.getString("sessionId"), active.getString("challengeId")) } } },
+          onFallback = { work { withContext(Dispatchers.IO) { activity.engine.fallback(active.getString("sessionId"), active.getString("challengeId")) } } })
         wakeCheck != null -> WakeCheckScreen(wakeCheck, busy, answerError, now,
           onReply = { awake -> work { withContext(Dispatchers.IO) { activity.engine.respondWake(wakeCheck.getString("sessionId"), awake) } } },
           onSubmit = { submit(wakeCheck, true, it) }, onScan = { scanAction = { submit(wakeCheck, true, it) } },
-          onAnswerEdit = { answerError = null })
+          onAnswerEdit = { answerError = null },
+          onComplete = { work { withContext(Dispatchers.IO) { activity.engine.completeWake(wakeCheck.getString("sessionId"), wakeCheck.getString("challengeId")) } } },
+          onFallback = { work { withContext(Dispatchers.IO) { activity.engine.fallbackWake(wakeCheck.getString("sessionId"), wakeCheck.getString("challengeId")) } } })
         draft != null -> EditorScreen(draft, draftIsNew, state?.optJSONObject("readiness"), busy, now,
           onChange = { if (!busy) draftJson = it.json().toString() },
           onBack = { draftJson = null }, onSave = { prepareAndRun(false) }, onTest = { prepareAndRun(true) },

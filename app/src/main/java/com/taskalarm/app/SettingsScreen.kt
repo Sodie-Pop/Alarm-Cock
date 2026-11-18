@@ -56,6 +56,8 @@ internal fun accessGroups(readiness: JSONObject?): AccessGroups {
   val optional = listOf(
     item(R.drawable.ic_photo_camera, "Camera", if (r.optBoolean("flashlightAvailable", true)) "For barcode tasks and the flashlight. Asked for when you first use them."
       else "For barcode tasks. Asked for when you first use them.", r.optBoolean("cameraPermission"), "Allowed", "camera", AccessStatus.SUGGESTED, "Not yet allowed"),
+    item(R.drawable.ic_directions_walk, "Physical activity", "For walking tasks, which count steps.", r.optBoolean("activityPermission", true),
+      "Allowed", "activity", AccessStatus.SUGGESTED, "Not yet allowed"),
   )
   return AccessGroups(required, recommended, optional)
 }

@@ -325,7 +325,8 @@ private fun EditorActions(busy: Boolean, onTest: () -> Unit, onSave: () -> Unit)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun TaskSheet(task: TaskDraft, onChange: (TaskDraft) -> Unit, onRemove: () -> Unit, onEnroll: () -> Unit, onDone: () -> Unit) {
-  Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 24.dp).navigationBarsPadding(),
+  var demo by rememberSaveable { mutableStateOf(false) }
+  Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, bottom = 24.dp).navigationBarsPadding(),
     verticalArrangement = Arrangement.spacedBy(16.dp)) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
       IconBadge(taskIcon(task.kind), MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.onPrimaryContainer, 48.dp)
@@ -334,7 +335,7 @@ internal fun TaskSheet(task: TaskDraft, onChange: (TaskDraft) -> Unit, onRemove:
         Text(taskBlurb(task.kind), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
     }
-    if (task.kind != "barcode") {
+    if (task.hasDifficulty) {
       Text("Difficulty", style = MaterialTheme.typography.titleSmall)
       SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
         val levels = listOf("easy", "medium", "hard")
@@ -344,32 +345,63 @@ internal fun TaskSheet(task: TaskDraft, onChange: (TaskDraft) -> Unit, onRemove:
           }
         }
       }
-      Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerHighest) {
+      if (task.kind in listOf("text", "math", "memory")) Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
           Text("Example", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
           Text(task.example, fontFamily = FontFamily.Monospace, fontSize = 22.sp, color = MaterialTheme.colorScheme.secondary)
-          Text(if (task.kind == "text") "Case and symbols must match. New text every round." else "New numbers every round.",
+          Text(when (task.kind) { "text" -> "Case and symbols must match. New text every round."
+            "memory" -> "A new sequence every round. Tap \"Show again\" as often as you like."; else -> "New numbers every round." },
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
       }
-    } else {
-      Text("Which barcode?", style = MaterialTheme.typography.titleSmall)
-      SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-        SegmentedButton(task.barcodeMode == "any", { onChange(task.copy(barcodeMode = "any")) }, SegmentedButtonDefaults.itemShape(0, 2)) { Text("Any") }
-        SegmentedButton(task.barcodeMode == "specific", { onChange(task.copy(barcodeMode = "specific")) }, SegmentedButtonDefaults.itemShape(1, 2)) { Text("A specific one") }
-      }
-      if (task.barcodeMode == "specific") {
-        if (task.barcode.isEmpty()) Notice("Scan the item you'll need to get up for — like something in the kitchen.")
-        else Notice("Saved: ${task.barcode}", R.drawable.ic_check_circle, MaterialTheme.colorScheme.tertiary)
-        FilledTonalButton(onClick = onEnroll, modifier = Modifier.fillMaxWidth()) {
-          Ico(R.drawable.ic_qr_code_scanner, size = 20.dp); Spacer(Modifier.width(8.dp))
-          Text(if (task.barcode.isEmpty()) "Scan barcode to save" else "Scan a different barcode")
-        }
-      } else Text("Any readable product barcode or QR code counts.", style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant)
+      if (task.kind == "breakout") SheetNote("Easy has a wide paddle and slow ball; Hard is narrow and fast.")
+      if (task.kind == "maze") SheetNote("Harder mazes have more walls and a faster ball.")
     }
+    when (task.kind) {
+      "barcode" -> {
+        Text("Which barcode?", style = MaterialTheme.typography.titleSmall)
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+          SegmentedButton(task.barcodeMode == "any", { onChange(task.copy(barcodeMode = "any")) }, SegmentedButtonDefaults.itemShape(0, 2)) { Text("Any") }
+          SegmentedButton(task.barcodeMode == "specific", { onChange(task.copy(barcodeMode = "specific")) }, SegmentedButtonDefaults.itemShape(1, 2)) { Text("A specific one") }
+        }
+        if (task.barcodeMode == "specific") {
+          if (task.barcode.isEmpty()) Notice("Scan the item you'll need to get up for — like something in the kitchen.")
+          else Notice("Saved: ${task.barcode}", R.drawable.ic_check_circle, MaterialTheme.colorScheme.tertiary)
+          FilledTonalButton(onClick = onEnroll, modifier = Modifier.fillMaxWidth()) {
+            Ico(R.drawable.ic_qr_code_scanner, size = 20.dp); Spacer(Modifier.width(8.dp))
+            Text(if (task.barcode.isEmpty()) "Scan barcode to save" else "Scan a different barcode")
+          }
+        } else SheetNote("Any readable product barcode or QR code counts.")
+      }
+      "breakout" -> {
+        ChipChoice("Play for", listOf(30, 60, 120, 300), task.gameSeconds, ::secondsText, inset = 0.dp) { onChange(task.copy(gameSeconds = it)) }
+        SheetNote("Only time spent moving the paddle counts. 20 seconds without moving resets the timer.")
+      }
+      "maze" -> {
+        Text("Controls", style = MaterialTheme.typography.titleSmall)
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+          SegmentedButton(task.controlMode == "tilt", { onChange(task.copy(controlMode = "tilt")) }, SegmentedButtonDefaults.itemShape(0, 2)) { Text("Tilt the phone") }
+          SegmentedButton(task.controlMode == "touch", { onChange(task.copy(controlMode = "touch")) }, SegmentedButtonDefaults.itemShape(1, 2)) { Text("Arrow buttons") }
+        }
+      }
+      "walk" -> {
+        ChipChoice("Steps", listOf(10, 20, 30, 50, 100), task.stepTarget, { "$it" }, inset = 0.dp) { onChange(task.copy(stepTarget = it)) }
+        SheetNote("Uses the phone's step sensor; Android asks for Physical activity access the first time. Steps count only while the task is on screen.")
+      }
+      "light" -> {
+        ChipChoice("Brightness", listOf(100, 200, 400, 800), task.lightLux, { "$it lux" }, inset = 0.dp) { onChange(task.copy(lightLux = it)) }
+        ChipChoice("Hold for", listOf(3, 5, 10), task.lightHoldSeconds, { "$it s" }, inset = 0.dp) { onChange(task.copy(lightHoldSeconds = it)) }
+        SheetNote("A lit room is about 100–300 lux; a window in daylight is over 1,000. Your alarm flashlight pauses during this task.")
+      }
+    }
+    if (task.usesSensor) ChipChoice("If the sensor isn't available", listOf("math", "text"), task.fallbackKind,
+      { if (it == "math") "Solve math" else "Type text" }, inset = 0.dp) { onChange(task.copy(fallbackKind = it)) }
     Stepper("Rounds", task.rounds, task.rounds.toString(), task.rounds > 1, task.rounds < 10,
       { onChange(task.copy(rounds = task.rounds - 1)) }, { onChange(task.copy(rounds = task.rounds + 1)) }, horizontalPadding = 0.dp)
+    if (task.kind in listOf("memory", "breakout", "maze", "walk", "light")) OutlinedButton(onClick = { demo = true }, modifier = Modifier.fillMaxWidth()) {
+      Ico(R.drawable.ic_play_arrow, size = 20.dp); Spacer(Modifier.width(8.dp)); Text("Try it")
+    }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
       TextButton(onClick = onRemove, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
         Ico(R.drawable.ic_delete, size = 20.dp); Spacer(Modifier.width(6.dp)); Text("Remove")
@@ -378,16 +410,55 @@ internal fun TaskSheet(task: TaskDraft, onChange: (TaskDraft) -> Unit, onRemove:
       Button(onClick = onDone) { Text("Done") }
     }
   }
+  if (demo) TaskDemoDialog(task) { demo = false }
+}
+
+@Composable
+private fun SheetNote(text: String) {
+  Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+/** Runs a task's real board without touching any alarm, so games and sensors can be tried out. */
+@Composable
+internal fun TaskDemoDialog(task: TaskDraft, onClose: () -> Unit) {
+  var key by remember { mutableStateOf(java.util.UUID.randomUUID().toString()) }
+  var finished by remember(key) { mutableStateOf(false) }
+  var note by remember(key) { mutableStateOf<String?>(null) }
+  val sequence = remember(key) { com.taskalarm.engine.Tasks.generate("memory", task.difficulty).answer }
+  androidx.compose.ui.window.Dialog(onDismissRequest = onClose, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+    Surface(Modifier.fillMaxWidth().padding(16.dp), shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+      Column(Modifier.padding(20.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Text("Try: ${taskTitle(task.kind)}", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+          IconButton(onClick = onClose) { Ico(R.drawable.ic_close, "Close") }
+        }
+        if (finished) {
+          Notice("Done — that's what finishing this task looks like.", R.drawable.ic_check_circle, MaterialTheme.colorScheme.tertiary)
+          Button(onClick = { key = java.util.UUID.randomUUID().toString() }) { Text("Try again") }
+        } else {
+          note?.let { Notice(it) }
+          val complete = { finished = true }
+          when (task.kind) {
+            "memory" -> MemoryBoard(sequence, key, true) { answer -> if (answer == sequence) finished = true else note = "Not quite — tap Show again and retry." }
+            "breakout" -> BreakoutBoard(task, key, true, complete)
+            "maze" -> MazeBoard(task, key, true, complete) { note = it }
+            "walk" -> WalkBoard(task, key, true, complete) { note = it }
+            "light" -> LightBoard(task, key, true, complete) { note = it }
+          }
+        }
+      }
+    }
+  }
 }
 
 @Composable
 internal fun AddTaskSheet(onPick: (String) -> Unit) {
-  Column(Modifier.fillMaxWidth().padding(bottom = 16.dp).navigationBarsPadding()) {
+  Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 16.dp).navigationBarsPadding()) {
     Text("Add a task", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp))
-    listOf("math", "text", "barcode").forEach { kind ->
-      Row(Modifier.fillMaxWidth().clickable { onPick(kind) }.padding(horizontal = 24.dp, vertical = 14.dp),
+    TaskDraft.KINDS.forEach { kind ->
+      Row(Modifier.fillMaxWidth().clickable { onPick(kind) }.padding(horizontal = 24.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        IconBadge(taskIcon(kind), MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.onPrimaryContainer, 48.dp)
+        IconBadge(taskIcon(kind), MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.onPrimaryContainer, 44.dp)
         Column(Modifier.weight(1f)) {
           Text(taskTitle(kind), style = MaterialTheme.typography.titleMedium)
           Text(taskBlurb(kind), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -20,6 +20,12 @@ internal object Tasks {
       val text = (1..size).map { alphabet[random.nextInt(alphabet.length)] }.joinToString("")
       return Challenge(text, text)
     }
+    if (kind == "memory") {
+      // Tiles 1–4; repeats allowed. Easy 3, medium 5, hard 7.
+      val length = when (difficulty) { "easy" -> 3; "medium" -> 5; else -> 7 }
+      val sequence = (1..length).map { number(1, 4) }.joinToString("")
+      return Challenge("Watch $length tiles light up, then repeat the order", sequence)
+    }
     require(kind == "math")
     return when (difficulty) {
       "easy" -> {

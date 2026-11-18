@@ -40,6 +40,7 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
       .put("fullScreen", Build.VERSION.SDK_INT < 34 || nm.canUseFullScreenIntent())
       .put("flashlightAvailable", context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH))
       .put("cameraPermission", context.checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
+      .put("activityPermission", Build.VERSION.SDK_INT < 29 || context.checkSelfPermission(Manifest.permission.ACTIVITY_RECOGNITION) == PackageManager.PERMISSION_GRANTED)
       // Exact-alarm access is granted at install (USE_EXACT_ALARM) on Android 13+ and cannot be revoked.
       .put("exactAlarmsAutomatic", Build.VERSION.SDK_INT >= 33)
       .put("fullScreenAutomatic", Build.VERSION.SDK_INT < 34)
@@ -91,9 +92,15 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
       require(tasks.length() <= 10) { "Choose at most 10 tasks per action" }
       for (i in 0 until tasks.length()) {
         val task = tasks.getJSONObject(i)
-        require(task.getString("kind") in listOf("text", "math", "barcode")) { "Unknown task" }
-        require(task.getString("difficulty") in listOf("easy", "medium", "hard"))
-        require(task.getInt("rounds") in 1..10)
+        val kind = task.getString("kind")
+        require(kind in listOf("text", "math", "barcode", "memory", "breakout", "maze", "walk", "light")) { "Unknown task" }
+        require(task.optString("difficulty", "easy") in listOf("easy", "medium", "hard"))
+        require(task.optInt("rounds", 1) in 1..10)
+        if (kind == "breakout") require(task.optInt("gameSeconds", 60) in 10..3600) { "Breakout must last 10 seconds to 1 hour" }
+        if (kind == "walk") require(task.optInt("stepTarget", 20) in 5..200) { "Choose 5–200 steps" }
+        if (kind == "light") require(task.optInt("lightLux", 200) in 50..2000 && task.optInt("lightHoldSeconds", 3) in 2..30) { "Choose 50–2000 lux held for 2–30 seconds" }
+        if (kind == "maze") require(task.optString("controlMode", "tilt") in listOf("tilt", "touch")) { "Invalid maze controls" }
+        require(task.optString("fallbackKind", "math") in listOf("math", "text")) { "Fallback must be math or text" }
         if (task.getString("kind") == "barcode") {
           require(task.getString("barcodeMode") in listOf("any", "specific"))
           val used = key == "dismissTasks" || (key == "snoozeTasks" && alarm.optBoolean("allowSnooze", true)) || (alarm.optBoolean("wakeEnabled") &&
@@ -230,7 +237,7 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
     if (alarm.optBoolean("shuffleTasks")) alarm.put(key, TaskOrder.shuffled(alarm.optJSONArray(key) ?: JSONArray()))
     val tasks = tasks(session)
     if (tasks.length() == 0) finish(sessions)
-    else { SessionTasks.start(session, tasks); store.sessions(sessions); ring() }
+    else { SessionTasks.start(session, tasks, now()); store.sessions(sessions); ring() }
   }
   private fun current(sessions: List<JSONObject>, id: String): JSONObject {
     val session = sessions.firstOrNull() ?: error("No active alarm")
@@ -249,11 +256,31 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
   fun submit(sessionId: String, challengeId: String, supplied: String): Boolean = synchronized(LOCK) {
     val sessions = store.sessions(); val session = current(sessions, sessionId)
     check(!session.isNull("action")) { "Choose dismiss or snooze first" }
-    return@synchronized when (SessionTasks.submit(session, tasks(session), challengeId, supplied)) {
-      SessionTasks.Result.WRONG -> false
-      SessionTasks.Result.NEXT -> { store.sessions(sessions); true }
-      SessionTasks.Result.COMPLETE -> { finish(sessions); true }
-    }
+    return@synchronized advanced(sessions, SessionTasks.submit(session, tasks(session), challengeId, supplied, now()))
+  }
+
+  /** Completion report from an interactive task (breakout, maze, walk, light). */
+  fun complete(sessionId: String, challengeId: String) = synchronized(LOCK) {
+    val sessions = store.sessions(); val session = current(sessions, sessionId)
+    check(!session.isNull("action")) { "Choose dismiss or snooze first" }
+    advanced(sessions, SessionTasks.complete(session, tasks(session), challengeId, now()))
+  }
+
+  /** Replaces an unavailable sensor task with its math/text fallback for this ring. */
+  fun fallback(sessionId: String, challengeId: String) = synchronized(LOCK) {
+    val sessions = store.sessions(); val session = current(sessions, sessionId)
+    check(!session.isNull("action")) { "Choose dismiss or snooze first" }
+    SessionTasks.fallback(session, tasks(session), challengeId, now())
+    store.sessions(sessions); ring()
+  }
+  fun completeWake(id: String, challengeId: String) = synchronized(LOCK) { wakeChecks.complete(id, challengeId) }
+  fun fallbackWake(id: String, challengeId: String) = synchronized(LOCK) { wakeChecks.fallback(id, challengeId) }
+
+  private fun advanced(sessions: MutableList<JSONObject>, result: SessionTasks.Result): Boolean = when (result) {
+    SessionTasks.Result.WRONG -> false
+    // Ring again so the service sees the new task (a light task pauses the flashlight).
+    SessionTasks.Result.NEXT -> { store.sessions(sessions); ring(); true }
+    SessionTasks.Result.COMPLETE -> { finish(sessions); true }
   }
 
   private fun finish(sessions: MutableList<JSONObject>) {

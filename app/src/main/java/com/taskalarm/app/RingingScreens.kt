@@ -29,7 +29,8 @@ import java.time.format.FormatStyle
 
 @Composable
 internal fun RingingScreen(active: JSONObject, busy: Boolean, answerError: String?, now: Long,
-  onAction: (String) -> Unit, onSubmit: (String) -> Unit, onScan: () -> Unit, onMute: (Boolean) -> Unit, onAnswerEdit: () -> Unit) {
+  onAction: (String) -> Unit, onSubmit: (String) -> Unit, onScan: () -> Unit, onMute: (Boolean) -> Unit, onAnswerEdit: () -> Unit,
+  onComplete: () -> Unit = {}, onFallback: () -> Unit = {}) {
   val alarm = AlarmDraft.from(active.getJSONObject("alarm"))
   val action = if (active.isNull("action")) null else active.getString("action")
   val test = active.optBoolean("test")
@@ -97,7 +98,8 @@ internal fun RingingScreen(active: JSONObject, busy: Boolean, answerError: Strin
         Text(alarm.label, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
         run {
           Spacer(Modifier.height(24.dp))
-          ChallengePanel(active, alarm.tasks(action), if (action == "dismiss") "Dismiss" else "Snooze", busy, answerError, onSubmit, onScan, onAnswerEdit)
+          ChallengePanel(active, alarm.tasks(action), if (action == "dismiss") "Dismiss" else "Snooze", busy, answerError, onSubmit, onScan, onAnswerEdit,
+            onComplete, onFallback)
           if (muted) Text("Muted while you solve. Leaving the app unmutes.", style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
           if (action == "snooze" || canSnooze) {
@@ -181,7 +183,7 @@ private fun BigChoice(title: String, subtitle: String, icon: Int, primary: Boole
 /** Shared task UI for ringing alarms and wake-up checks. */
 @Composable
 internal fun ChallengePanel(session: JSONObject, tasks: List<TaskDraft>, actionLabel: String, busy: Boolean, answerError: String?,
-  onSubmit: (String) -> Unit, onScan: () -> Unit, onAnswerEdit: () -> Unit) {
+  onSubmit: (String) -> Unit, onScan: () -> Unit, onAnswerEdit: () -> Unit, onComplete: () -> Unit = {}, onFallback: () -> Unit = {}) {
   val kind = session.optString("kind")
   val index = session.getInt("taskIndex").coerceIn(0, (tasks.size - 1).coerceAtLeast(0))
   val task = tasks.getOrNull(index) ?: return
@@ -190,6 +192,8 @@ internal fun ChallengePanel(session: JSONObject, tasks: List<TaskDraft>, actionL
   val total = tasks.sumOf { it.rounds }
   val done = tasks.take(index).sumOf { it.rounds } + round - 1
   fun send() { if (!busy && answer.isNotEmpty()) onSubmit(answer) }
+  val challenge = session.optString("challengeId")
+  var unavailable by remember(challenge) { mutableStateOf<String?>(null) }
   Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.92f)) {
     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
       Row(verticalAlignment = Alignment.CenterVertically) {
@@ -201,9 +205,23 @@ internal fun ChallengePanel(session: JSONObject, tasks: List<TaskDraft>, actionL
       Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         IconBadge(taskIcon(kind), size = 36.dp)
         Text(when (kind) { "text" -> "Type this exactly, including capitals and symbols."; "math" -> "Solve to keep going."
-          else -> if (task.barcodeMode == "specific") "Get up and scan your saved barcode." else "Get up and scan any barcode or QR code." },
+          "memory" -> "Watch the tiles, then tap them in the same order."
+          "barcode" -> if (task.barcodeMode == "specific") "Get up and scan your saved barcode." else "Get up and scan any barcode or QR code."
+          else -> session.optString("prompt") + "." },
           style = MaterialTheme.typography.bodyLarge)
       }
+      if (unavailable != null) {
+        Notice(unavailable!!)
+        FilledTonalButton(onClick = onFallback, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Use ${fallbackName(task.fallbackKind)} instead") }
+      }
+      when (kind) {
+        "memory" -> { if (answerError != null) Notice(answerError); MemoryBoard(session.optString("sequence"), challenge, !busy, onSubmit) }
+        "breakout" -> BreakoutBoard(task, challenge, !busy, onComplete)
+        "maze" -> MazeBoard(task, challenge, !busy, onComplete) { unavailable = it }
+        "walk" -> WalkBoard(task, challenge, !busy, onComplete) { unavailable = it }
+        "light" -> LightBoard(task, challenge, !busy, onComplete) { unavailable = it }
+      }
+      if (kind in listOf("memory", "breakout", "maze", "walk", "light")) return@Column
       if (kind != "barcode") Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerHighest) {
         Text(session.optString("prompt"), fontFamily = FontFamily.Monospace, fontSize = if (session.optString("prompt").length > 12) 24.sp else 30.sp,
           color = MaterialTheme.colorScheme.secondary, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp))
@@ -244,7 +262,8 @@ private fun Progress(done: Int, total: Int) {
 
 @Composable
 internal fun WakeCheckScreen(check: JSONObject, busy: Boolean, answerError: String?, now: Long, onReply: (Boolean) -> Unit,
-  onSubmit: (String) -> Unit, onScan: () -> Unit, onAnswerEdit: () -> Unit) {
+  onSubmit: (String) -> Unit, onScan: () -> Unit, onAnswerEdit: () -> Unit,
+  onComplete: () -> Unit = {}, onFallback: () -> Unit = {}) {
   val alarm = AlarmDraft.from(check.getJSONObject("alarm"))
   val deadline = check.getLong("deadlineAt")
   val window = (deadline - check.getLong("dueAt")).coerceAtLeast(1)
@@ -272,7 +291,7 @@ internal fun WakeCheckScreen(check: JSONObject, busy: Boolean, answerError: Stri
             modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp)) {
             Ico(R.drawable.ic_check_circle, size = 28.dp); Spacer(Modifier.width(12.dp)); Text("Yes, I'm up", style = MaterialTheme.typography.titleLarge)
           }
-        } else ChallengePanel(check, alarm.wakeTasks, "Confirm", busy, answerError, onSubmit, onScan, onAnswerEdit)
+        } else ChallengePanel(check, alarm.wakeTasks, "Confirm", busy, answerError, onSubmit, onScan, onAnswerEdit, onComplete, onFallback)
         TextButton(onClick = { onReply(false) }, enabled = !busy) { Text("No — ring again now") }
         Text("If you don't answer in time, the alarm rings again.", style = MaterialTheme.typography.bodySmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
