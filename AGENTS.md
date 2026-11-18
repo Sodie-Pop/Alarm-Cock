@@ -57,8 +57,10 @@ not the material-icons-extended library.
 
 The user installs debug builds over the existing app, so every APK meant for their phone must be signed with the
 dedicated key at `signing/task-alarm-debug.keystore` (certificate SHA-256 `b35e88b5…8b1014`, CN=Task Alarm Debug).
-The repo is public, so the key is **never committed** (`*.keystore` is gitignored); the user keeps the file and
-uploads it when needed. If it's missing, Gradle prints `WARNING: signing/task-alarm-debug.keystore not found` and
-the APK falls back to a throwaway key that will not install over their app. Ask the user for the file before
-handing over an APK. Tests and lint don't need it. Bump `versionCode`/`versionName` in `app/build.gradle.kts` for
+The repo is public, so the key is **never committed** (`*.keystore` is gitignored). The owner keeps it in the
+private repo `Sodie-Pop/Alarm-Cock-Keystore`; the environment setup script copies it into `signing/` when that repo
+is checked out alongside. Otherwise attach that repo read-only and copy `task-alarm-debug.keystore` into `signing/`
+yourself. If it's missing, Gradle prints `WARNING: signing/task-alarm-debug.keystore not found` and
+the APK falls back to a throwaway key that will not install over their app. Never hand over an APK signed
+with the fallback key. Tests and lint don't need it. Bump `versionCode`/`versionName` in `app/build.gradle.kts` for
 user-facing releases.
