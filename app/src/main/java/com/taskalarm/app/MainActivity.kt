@@ -95,12 +95,14 @@ class MainActivity : ComponentActivity() {
       "appSettings" -> Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).setData(Uri.parse("package:$packageName"))
       "exact" -> if (Build.VERSION.SDK_INT >= 31) Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM) else return
       "fullScreen" -> if (Build.VERSION.SDK_INT >= 34) Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT) else return
+      "volume" -> Intent(Settings.ACTION_SOUND_SETTINGS)
       "wakeNotifications" -> Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName).putExtra(Settings.EXTRA_CHANNEL_ID, WakeChecks.CHANNEL)
       else -> Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
     }
     if (kind in listOf("exact", "fullScreen")) intent.data = Uri.parse("package:$packageName")
     startActivity(intent)
   }
+  internal fun versionName(): String = packageManager.getPackageInfo(packageName, 0).versionName ?: ""
   internal fun setBarcodeScanning(active: Boolean) {
     if (synchronized(AlarmEngine.LOCK) { AlarmStore(this).sessions().isEmpty() }) return
     startForegroundService(Intent(this, RingingService::class.java).putExtra("scannerActive", active))

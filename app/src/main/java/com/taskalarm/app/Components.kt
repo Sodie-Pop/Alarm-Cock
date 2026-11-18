@@ -123,7 +123,7 @@ internal fun Notice(text: String, @DrawableRes icon: Int = R.drawable.ic_warning
 
 /** Missing Android access, presented as one card with an Allow button per item. */
 @Composable
-internal fun SetupCard(readiness: JSONObject?, onAccess: (String) -> Unit) {
+internal fun SetupCard(readiness: JSONObject?, onAccess: (String) -> Unit, onSettings: (() -> Unit)? = null) {
   if (readiness == null) return
   val missing = listOf(
     Triple("exactAlarms", "Alarms & reminders", "exact"),
@@ -146,6 +146,7 @@ internal fun SetupCard(readiness: JSONObject?, onAccess: (String) -> Unit) {
           Button(onClick = { onAccess(kind) }) { Text("Allow") }
         }
       }
+      if (onSettings != null) TextButton(onClick = onSettings, contentPadding = PaddingValues(0.dp)) { Text("See all settings") }
     }
   }
 }

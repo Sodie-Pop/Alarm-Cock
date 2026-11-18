@@ -25,6 +25,11 @@ No physical-device checks have been executed in the cloud environment. Record de
 - Choose an imported sound, delete/rename it so playback fails, and ring with the screen off for 5+ minutes; the fallback beep must keep going.
 - Dismiss and snooze alarms; confirm `adb shell dumpsys alarm` shows no leftover `taskalarm://ringing/backstop` alarm and the lock screen's next-alarm time returns to the real next alarm.
 
+## Settings page (0.4.1)
+
+- Open Settings from the gear. With everything granted, the summary must say alarms are ready and every row shows a green status.
+- Turn off alarm notifications, set Battery usage to Restricted, and mute the alarm volume; each must show a red status, the summary and gear badge must count them, and each button must open the matching Android screen. Restore them and confirm the page updates within a second of returning.
+
 ## Task completion
 
 - Try easy, medium, and hard text and math, checking the examples in setup against generated task styles. Wrong answers must not advance; text case and symbols must match exactly.

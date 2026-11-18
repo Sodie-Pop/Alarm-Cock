@@ -20,7 +20,7 @@ import java.util.Locale
 @Composable
 internal fun HomeScreen(state: JSONObject?, busy: Boolean, snackbar: SnackbarHostState, now: Long,
   onAdd: () -> Unit, onEdit: (AlarmDraft) -> Unit, onToggle: (AlarmDraft, Boolean) -> Unit,
-  onDelete: (AlarmDraft) -> Unit, onTest: (AlarmDraft) -> Unit, onAccess: (String) -> Unit) {
+  onDelete: (AlarmDraft) -> Unit, onTest: (AlarmDraft) -> Unit, onAccess: (String) -> Unit, onSettings: () -> Unit = {}) {
   val array = state?.optJSONArray("alarms")
   val stored = if (array == null) emptyList() else (0 until array.length()).map { array.getJSONObject(it) }
     .sortedBy { it.getString("hour").toInt() * 60 + it.getString("minute").toInt() }
@@ -37,8 +37,8 @@ internal fun HomeScreen(state: JSONObject?, busy: Boolean, snackbar: SnackbarHos
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp,
       top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding() + 104.dp),
       verticalArrangement = Arrangement.spacedBy(12.dp)) {
-      item { HomeHeader(stored, now, is24) }
-      item { SetupCard(state?.optJSONObject("readiness"), onAccess) }
+      item { HomeHeader(stored, now, is24, accessGroups(state?.optJSONObject("readiness")).attention, onSettings) }
+      item { SetupCard(state?.optJSONObject("readiness"), onAccess, onSettings) }
       items(checks, key = { "check-" + it.getString("sessionId") }) { WakeCheckPending(it, is24) }
       if (state != null && stored.isEmpty()) item { EmptyAlarms(onAdd) }
       items(stored, key = { it.getString("id") }) { value ->
@@ -49,10 +49,17 @@ internal fun HomeScreen(state: JSONObject?, busy: Boolean, snackbar: SnackbarHos
 }
 
 @Composable
-private fun HomeHeader(alarms: List<JSONObject>, now: Long, is24: Boolean) {
+private fun HomeHeader(alarms: List<JSONObject>, now: Long, is24: Boolean, attention: Int, onSettings: () -> Unit) {
   val next = alarms.filter { it.getBoolean("enabled") && it.has("nextAt") }.minOfOrNull { it.getLong("nextAt") }
-  Column(Modifier.padding(start = 4.dp, end = 4.dp, top = 28.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-    Text("Alarms", style = MaterialTheme.typography.displaySmall)
+  Column(Modifier.padding(start = 4.dp, end = 4.dp, top = 20.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Text("Alarms", style = MaterialTheme.typography.displaySmall, modifier = Modifier.weight(1f))
+      IconButton(onClick = onSettings) {
+        BadgedBox(badge = { if (attention > 0) Badge { Text(attention.toString()) } }) {
+          Ico(R.drawable.ic_settings, if (attention > 0) "Settings, $attention need attention" else "Settings")
+        }
+      }
+    }
     if (next != null) {
       val day = Instant.ofEpochMilli(next).atZone(ZoneId.systemDefault()).dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault())
       val clock = clockText(next, is24)

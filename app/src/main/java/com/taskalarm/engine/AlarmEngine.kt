@@ -8,6 +8,7 @@ import android.Manifest
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import org.json.JSONArray
@@ -29,6 +30,7 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
   fun readiness(): JSONObject {
+    val audio = context.getSystemService(AudioManager::class.java)
     val enabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
     val nm = context.getSystemService(NotificationManager::class.java)
     fun channelEnabled(id: String) = nm.getNotificationChannel(id)?.importance != NotificationManager.IMPORTANCE_NONE
@@ -38,6 +40,14 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
       .put("fullScreen", Build.VERSION.SDK_INT < 34 || nm.canUseFullScreenIntent())
       .put("flashlightAvailable", context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH))
       .put("cameraPermission", context.checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
+      // Exact-alarm access is granted at install (USE_EXACT_ALARM) on Android 13+ and cannot be revoked.
+      .put("exactAlarmsAutomatic", Build.VERSION.SDK_INT >= 33)
+      .put("fullScreenAutomatic", Build.VERSION.SDK_INT < 34)
+      // Battery "Unrestricted" exempts the app from optimizations; "Restricted" can block the ringing service.
+      .put("batteryUnrestricted", context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName))
+      .put("backgroundRestricted", Build.VERSION.SDK_INT >= 28 && context.getSystemService(ActivityManager::class.java).isBackgroundRestricted)
+      .put("alarmVolume", audio.getStreamVolume(AudioManager.STREAM_ALARM))
+      .put("alarmVolumeMax", audio.getStreamMaxVolume(AudioManager.STREAM_ALARM))
   }
 
   fun state(): String = synchronized(LOCK) {

@@ -87,6 +87,14 @@ class DirectBootTest {
     assertTrue(data.any { it.host == "ringing" })
   }
 
+  @Test fun readinessReportsBatteryRestrictionAndAlarmVolume() {
+    val readiness = AlarmEngine(context).readiness()
+    for (key in listOf("batteryUnrestricted", "backgroundRestricted", "alarmVolume", "alarmVolumeMax", "exactAlarmsAutomatic", "fullScreenAutomatic")) {
+      assertTrue(key, readiness.has(key))
+    }
+    assertTrue(readiness.getInt("alarmVolumeMax") > 0)
+  }
+
   @Test fun launchIntentNamesTheActivityExplicitly() {
     val intent = AlarmEngine.launchIntent(context)
     assertEquals(ComponentName(context, "com.taskalarm.app.MainActivity"), intent.component)

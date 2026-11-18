@@ -23,6 +23,7 @@ internal fun TaskAlarmApp(activity: MainActivity) {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var draftJson by rememberSaveable { mutableStateOf<String?>(null) }
     var draftIsNew by rememberSaveable { mutableStateOf(false) }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var answerError by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -63,10 +64,11 @@ internal fun TaskAlarmApp(activity: MainActivity) {
     LaunchedEffect(immersive) { activity.setImmersiveBars(immersive) }
     LaunchedEffect(active?.optString("sessionId"), wakeCheck?.optString("sessionId")) { scanAction = null }
     LaunchedEffect(active?.optString("challengeId"), wakeCheck?.optString("challengeId")) { answerError = null }
-    BackHandler(enabled = scanAction != null || active != null || wakeCheck != null || draft != null) {
+    BackHandler(enabled = scanAction != null || active != null || wakeCheck != null || draft != null || showSettings) {
       if (scanAction != null) scanAction = null
       else if (active == null && wakeCheck != null) activity.moveTaskToBack(true)
-      else if (active == null && !busy) draftJson = null
+      else if (active == null && draft != null && !busy) draftJson = null
+      else if (active == null && showSettings) showSettings = false
     }
     fun submit(session: JSONObject, check: Boolean, answer: String) {
       work {
@@ -121,6 +123,8 @@ internal fun TaskAlarmApp(activity: MainActivity) {
               draftJson = current.withTasks(action, current.tasks(action).map { if (it.id == id) it.copy(barcode = value) else it }).json().toString()
             }
           } })
+        showSettings -> SettingsScreen(state?.optJSONObject("readiness"), remember { activity.versionName() }, onBack = { showSettings = false },
+          onAccess = { kind -> try { activity.openAccess(kind) } catch (failure: Exception) { error = failure.message } })
         else -> HomeScreen(state, busy, snackbar, now,
           onAdd = { draftIsNew = true; draftJson = AlarmDraft().json().toString() },
           onEdit = { draftIsNew = false; draftJson = it.json().toString() },
@@ -130,7 +134,8 @@ internal fun TaskAlarmApp(activity: MainActivity) {
           } },
           onDelete = { deleteTarget = it },
           onTest = { alarm -> work { withContext(Dispatchers.IO) { activity.engine.test(alarm.json().toString()) } } },
-          onAccess = { kind -> try { activity.openAccess(kind) } catch (failure: Exception) { error = failure.message } })
+          onAccess = { kind -> try { activity.openAccess(kind) } catch (failure: Exception) { error = failure.message } },
+          onSettings = { showSettings = true })
       }
     }
     error?.let { message -> AlertDialog(onDismissRequest = { error = null }, icon = { Ico(R.drawable.ic_warning) },

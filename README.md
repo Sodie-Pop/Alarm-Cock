@@ -38,6 +38,16 @@ Each alarm has **Off**, **Steady**, and **Flashing** flashlight options. Existin
 
 Android requires Camera permission for torch control. The editor provides permission and app-settings buttons; enabling or testing a flashlight alarm checks permission and hardware first. If the camera becomes unavailable during an alarm, sound and tasks continue, the task screen shows a warning, and the service retries. Barcode scanning temporarily releases the torch so CameraX can use the camera, then resumes it after scanning closes or the app leaves the scanner. The service releases its torch pulse callbacks and CPU wake lock when it stops. Lock-screen, background, camera contention, and manufacturer-specific behavior still need physical-device verification.
 
+## Settings page (0.4.1)
+
+The gear on the home screen opens **Settings**, which lists every permission and device setting the app uses, whether it is already set, and a button that opens the right Android screen:
+
+- **Required:** Alarms & reminders (granted automatically on Android 13+), alarm notifications, and showing over the lock screen.
+- **Recommended:** battery usage (Unrestricted suggested; Restricted is flagged because it can stop alarms when the app is closed), alarm volume (muted is flagged), and wake-up check notifications.
+- **Optional:** camera, for barcode tasks and the flashlight.
+
+A summary at the top says whether alarms are ready to ring, and the gear shows a badge counting items that need attention.
+
 ## Redesigned interface (0.4.0)
 
 The UI was rebuilt around a "night to dawn" Material 3 theme that follows the system light/dark setting; the ringing, wake-up check and scanner screens are always dark.

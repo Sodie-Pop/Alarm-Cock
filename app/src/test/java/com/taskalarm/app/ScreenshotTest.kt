@@ -84,6 +84,12 @@ class ScreenshotTest {
       capture("sheet-barcode", dark) {
         Box(Modifier.padding(top = 24.dp)) { TaskSheet(TaskDraft(kind = "barcode", barcodeMode = "specific"), {}, {}, {}, {}) }
       }
+      val good = JSONObject().put("exactAlarmsAutomatic", true).put("batteryUnrestricted", true).put("cameraPermission", true)
+        .put("alarmVolume", 6).put("alarmVolumeMax", 7)
+      capture("settings", dark) { SettingsScreen(good, "0.4.0", {}, {}) }
+      val issues = JSONObject().put("exactAlarmsAutomatic", true).put("notifications", false).put("backgroundRestricted", true)
+        .put("alarmVolume", 0).put("alarmVolumeMax", 7).put("cameraPermission", false)
+      capture("settings-issues", dark) { SettingsScreen(issues, "0.4.0", {}, {}) }
       capture("sheet-add", dark) { Box(Modifier.padding(top = 24.dp)) { AddTaskSheet {} } }
       capture("sheet-sound", dark) { Box(Modifier.padding(top = 24.dp)) { SoundSheet(morning.copy(soundUri = "content://x", soundName = "Birdsong.mp3"), {}, {}, {}) } }
     }
