@@ -20,7 +20,11 @@ import java.util.Locale
 @Composable
 internal fun HomeScreen(state: JSONObject?, busy: Boolean, snackbar: SnackbarHostState, now: Long,
   onAdd: () -> Unit, onEdit: (AlarmDraft) -> Unit, onToggle: (AlarmDraft, Boolean) -> Unit,
-  onDelete: (AlarmDraft) -> Unit, onTest: (AlarmDraft) -> Unit, onAccess: (String) -> Unit, onSettings: () -> Unit = {}) {
+  onDelete: (AlarmDraft) -> Unit, onTest: (AlarmDraft) -> Unit, onAccess: (String) -> Unit, onSettings: () -> Unit = {},
+  onSkip: (AlarmDraft, Boolean) -> Unit = { _, _ -> }, onPause: (AlarmDraft, Long) -> Unit = { _, _ -> },
+  onDuplicate: (AlarmDraft, Int, Int) -> Unit = { _, _, _ -> }) {
+  var pausing by remember { mutableStateOf<AlarmDraft?>(null) }
+  var duplicating by remember { mutableStateOf<AlarmDraft?>(null) }
   val array = state?.optJSONArray("alarms")
   val stored = if (array == null) emptyList() else (0 until array.length()).map { array.getJSONObject(it) }
     .sortedBy { it.getString("hour").toInt() * 60 + it.getString("minute").toInt() }
@@ -42,10 +46,13 @@ internal fun HomeScreen(state: JSONObject?, busy: Boolean, snackbar: SnackbarHos
       items(checks, key = { "check-" + it.getString("sessionId") }) { WakeCheckPending(it, is24) }
       if (state != null && stored.isEmpty()) item { EmptyAlarms(onAdd) }
       items(stored, key = { it.getString("id") }) { value ->
-        AlarmCard(AlarmDraft.from(value), busy, is24, onEdit, onToggle, onDelete, onTest)
+        AlarmCard(AlarmDraft.from(value), busy, is24, now, onEdit, onToggle, onDelete, onTest, onSkip, { pausing = it }, { onPause(it, 0) },
+          { duplicating = it })
       }
     }
   }
+  pausing?.let { alarm -> PauseDialog(onDismiss = { pausing = null }) { until -> pausing = null; onPause(alarm, until) } }
+  duplicating?.let { alarm -> DuplicateDialog(alarm, is24, onDismiss = { duplicating = null }) { count, interval -> duplicating = null; onDuplicate(alarm, count, interval) } }
 }
 
 @Composable
@@ -105,8 +112,11 @@ private fun EmptyAlarms(onAdd: () -> Unit) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun AlarmCard(alarm: AlarmDraft, busy: Boolean, is24: Boolean, onEdit: (AlarmDraft) -> Unit,
-  onToggle: (AlarmDraft, Boolean) -> Unit, onDelete: (AlarmDraft) -> Unit, onTest: (AlarmDraft) -> Unit) {
+private fun AlarmCard(alarm: AlarmDraft, busy: Boolean, is24: Boolean, now: Long, onEdit: (AlarmDraft) -> Unit,
+  onToggle: (AlarmDraft, Boolean) -> Unit, onDelete: (AlarmDraft) -> Unit, onTest: (AlarmDraft) -> Unit,
+  onSkip: (AlarmDraft, Boolean) -> Unit, onPause: (AlarmDraft) -> Unit, onResume: (AlarmDraft) -> Unit, onDuplicate: (AlarmDraft) -> Unit) {
+  val skipping = alarm.skipDate.isNotEmpty() && alarm.skipDate >= java.time.LocalDate.now().toString()
+  val paused = alarm.pauseUntil > now
   val clock = clockText(alarm.hour.toInt(), alarm.minute.toInt(), is24)
   val on = alarm.enabled
   val dim = MaterialTheme.colorScheme.onSurfaceVariant
@@ -124,11 +134,19 @@ private fun AlarmCard(alarm: AlarmDraft, busy: Boolean, is24: Boolean, onEdit: (
           }
           Text("${alarm.label} · ${repeatText(alarm.days)}", style = MaterialTheme.typography.bodyLarge, color = dim,
             maxLines = 1, overflow = TextOverflow.Ellipsis)
+          if (on && (skipping || paused)) Text(if (paused) "Paused until ${shortDate(alarm.pauseUntil)}"
+            else "Skipping ${shortDate(java.time.LocalDate.parse(alarm.skipDate))}", style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary)
         }
         Switch(checked = on, enabled = !busy, onCheckedChange = { onToggle(alarm, it) })
         Box {
           IconButton(onClick = { menu = true }, enabled = !busy) { Ico(R.drawable.ic_more_vert, "More options for ${alarm.label}") }
           DropdownMenu(menu, onDismissRequest = { menu = false }) {
+            if (on && alarm.days.isNotEmpty()) DropdownMenuItem(text = { Text(if (skipping) "Undo skip" else "Skip next") },
+              leadingIcon = { Ico(R.drawable.ic_snooze) }, onClick = { menu = false; onSkip(alarm, !skipping) })
+            DropdownMenuItem(text = { Text(if (paused) "Resume now" else "Pause until…") }, leadingIcon = { Ico(R.drawable.ic_timer) },
+              onClick = { menu = false; if (paused) onResume(alarm) else onPause(alarm) })
+            DropdownMenuItem(text = { Text("Duplicate…") }, leadingIcon = { Ico(R.drawable.ic_add) }, onClick = { menu = false; onDuplicate(alarm) })
             DropdownMenuItem(text = { Text("Test now") }, leadingIcon = { Ico(R.drawable.ic_play_arrow) },
               onClick = { menu = false; onTest(alarm) })
             DropdownMenuItem(text = { Text("Delete") }, leadingIcon = { Ico(R.drawable.ic_delete) },
@@ -150,4 +168,51 @@ private fun AlarmCard(alarm: AlarmDraft, busy: Boolean, is24: Boolean, onEdit: (
       }
     }
   }
+}
+
+internal fun shortDate(millis: Long): String = shortDate(java.time.Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate())
+internal fun shortDate(date: java.time.LocalDate): String =
+  date.format(java.time.format.DateTimeFormatter.ofPattern("EEE, MMM d", Locale.getDefault()))
+
+/** Pick the date the alarm should start ringing again (from local midnight). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun PauseDialog(onDismiss: () -> Unit, onPause: (Long) -> Unit) {
+  val tomorrow = java.time.LocalDate.now().plusDays(1)
+  val state = rememberDatePickerState(initialSelectedDateMillis = tomorrow.atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(),
+    selectableDates = object : SelectableDates {
+      override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis >= tomorrow.atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+    })
+  DatePickerDialog(onDismissRequest = onDismiss, confirmButton = {
+    TextButton(onClick = {
+      val picked = java.time.Instant.ofEpochMilli(state.selectedDateMillis ?: return@TextButton).atZone(java.time.ZoneOffset.UTC).toLocalDate()
+      onPause(picked.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli())
+    }) { Text("Pause") }
+  }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }) {
+    DatePicker(state, title = { Text("Ring again from", modifier = Modifier.padding(start = 24.dp, top = 16.dp)) })
+  }
+}
+
+/** Create copies every N minutes after this alarm, previewing their times. */
+@Composable
+internal fun DuplicateDialog(alarm: AlarmDraft, is24: Boolean, onDismiss: () -> Unit, onCreate: (Int, Int) -> Unit) {
+  var count by remember { mutableIntStateOf(5) }
+  var interval by remember { mutableIntStateOf(5) }
+  val fits = count * interval < 1440
+  val start = alarm.hour.toInt() * 60 + alarm.minute.toInt()
+  AlertDialog(onDismissRequest = onDismiss, icon = { Ico(R.drawable.ic_add) }, title = { Text("Duplicate ${alarm.label}") },
+    text = {
+      Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Stepper("Copies", count, "$count", count > 1, count < 50, { count-- }, { count++ }, horizontalPadding = 0.dp)
+        ChipChoice("Every", listOf(1, 2, 5, 10, 15, 30, 60), interval, ::minutesText, inset = 0.dp) { interval = it }
+        if (fits) Text((1..count).take(6).joinToString(", ") { i ->
+          val m = (start + i * interval) % 1440; clockText(m / 60, m % 60, is24).let { "${it.time}${if (it.period.isEmpty()) "" else " " + it.period}" }
+        } + if (count > 6) " …and ${count - 6} more" else "", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        else Notice("Copies must all fall within 24 hours.")
+        Text("Copies keep this alarm's tasks and settings, and won't ring before it.", style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant)
+      }
+    },
+    confirmButton = { TextButton(onClick = { onCreate(count, interval) }, enabled = fits) { Text("Create $count") } },
+    dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
 }

@@ -88,6 +88,11 @@ data class AlarmDraft(
   val escalationEnabled: Boolean = false,
   val escalationAfterMinutes: Int = 2,
   val escalationTones: List<SoundRef> = SoundRef.BUILTIN,
+  /** Schedule exceptions: no rings before [pauseUntil]; [skipDate] (local ISO date) is skipped once. */
+  val pauseUntil: Long = 0,
+  val skipDate: String = "",
+  /** Internal boundary for duplicated alarms: never ring before the source's first occurrence. */
+  val notBefore: Long = 0,
 ) {
   fun json() = JSONObject().put("id", id).put("label", label).put("hour", hour).put("minute", minute)
     .put("days", JSONArray(days.sorted())).put("enabled", enabled).put("snoozeMinutes", snoozeMinutes)
@@ -102,6 +107,7 @@ data class AlarmDraft(
     .put("shuffleTasks", shuffleTasks).put("vibrate", vibrate).put("movingDismiss", movingDismiss)
     .put("escalationEnabled", escalationEnabled).put("escalationAfterMinutes", escalationAfterMinutes)
     .put("escalationTones", JSONArray(escalationTones.map { it.json() }))
+    .put("pauseUntil", pauseUntil).put("skipDate", skipDate).put("notBefore", notBefore)
     .put("wakeRandomDelay", wakeRandomDelay).put("wakeDelayMinMinutes", wakeDelayMinMinutes).put("wakeDelayMaxMinutes", wakeDelayMaxMinutes)
 
   fun validate() {
@@ -153,7 +159,8 @@ data class AlarmDraft(
         escalationEnabled = value.optBoolean("escalationEnabled"), escalationAfterMinutes = value.optInt("escalationAfterMinutes", 2),
         escalationTones = value.optJSONArray("escalationTones")?.let { array ->
           (0 until array.length()).map { array.getJSONObject(it) }.map { SoundRef(it.getString("uri"), it.optString("name", "Sound")) }
-        } ?: SoundRef.BUILTIN)
+        } ?: SoundRef.BUILTIN,
+        pauseUntil = value.optLong("pauseUntil", 0), skipDate = value.optString("skipDate"), notBefore = value.optLong("notBefore", 0))
     }
   }
 }

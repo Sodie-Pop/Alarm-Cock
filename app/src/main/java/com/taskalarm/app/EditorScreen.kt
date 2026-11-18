@@ -27,7 +27,9 @@ import org.json.JSONObject
 internal fun EditorScreen(alarm: AlarmDraft, isNew: Boolean, readiness: JSONObject?, busy: Boolean, now: Long,
   onChange: (AlarmDraft) -> Unit, onBack: () -> Unit, onSave: () -> Unit, onTest: () -> Unit, onTestWake: () -> Unit,
   onAccess: (String) -> Unit, onSound: (custom: Boolean, playlist: Boolean) -> Unit, onEnroll: (String, String) -> Unit,
-  onTestEscalation: () -> Unit = {}) {
+  onTestEscalation: () -> Unit = {}, routines: List<Routine> = emptyList(), onSaveRoutine: (String) -> Unit = {},
+  onDeleteRoutine: (String) -> Unit = {}) {
+  var routineSheet by rememberSaveable { mutableStateOf(false) }
   // "action|taskId" so the sheet survives a trip to the barcode scanner.
   var editing by rememberSaveable { mutableStateOf<String?>(null) }
   var adding by rememberSaveable { mutableStateOf<String?>(null) }
@@ -52,6 +54,9 @@ internal fun EditorScreen(alarm: AlarmDraft, isNew: Boolean, readiness: JSONObje
       OutlinedTextField(alarm.label, { value -> update { it.copy(label = value.take(120)) } }, Modifier.fillMaxWidth(),
         label = { Text("Alarm name") }, leadingIcon = { Ico(R.drawable.ic_label) }, singleLine = true,
         shape = MaterialTheme.shapes.medium)
+      SettingsCard {
+        NavRow("Routines", "Apply a saved set of tasks and settings, or save this one", R.drawable.ic_grid_view, !busy) { routineSheet = true }
+      }
 
       SectionHeader("To turn it off", "Finish these, in order, to dismiss the alarm.")
       SettingsCard {
@@ -127,6 +132,10 @@ internal fun EditorScreen(alarm: AlarmDraft, isNew: Boolean, readiness: JSONObje
       onDefault = { update { it.copy(soundUri = "", soundName = "Default phone alarm", normalize = false, playbackUri = "") } },
       onNormalize = { value -> update { it.copy(normalize = value) } })
   }
+  if (routineSheet) ModalBottomSheet(onDismissRequest = { routineSheet = false }) {
+    RoutineSheet(routines, onApply = { routine -> routineSheet = false; update { routine.applyTo(it) } },
+      onDelete = onDeleteRoutine, onSave = onSaveRoutine)
+  }
   if (timeDialog) TimeDialog(alarm.hour.toIntOrNull() ?: 7, alarm.minute.toIntOrNull() ?: 0, is24, onDismiss = { timeDialog = false }) { hour, minute ->
     timeDialog = false
     update { it.copy(hour = hour.toString().padStart(2, '0'), minute = minute.toString().padStart(2, '0')) }
@@ -146,6 +155,11 @@ private fun TimeHero(alarm: AlarmDraft, is24: Boolean, now: Long, onClick: () ->
     }
     if (next != null) Text("Rings in ${durationText(next - now)}", style = MaterialTheme.typography.titleMedium,
       color = MaterialTheme.colorScheme.primary)
+    if (alarm.pauseUntil > now) Text("Paused until ${shortDate(alarm.pauseUntil)} · resume from the alarm's menu",
+      style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    else if (alarm.skipDate.isNotEmpty() && alarm.skipDate >= java.time.LocalDate.now().toString())
+      Text("Skipping ${shortDate(java.time.LocalDate.parse(alarm.skipDate))}", style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant)
   }
 }
 
@@ -165,6 +179,11 @@ private fun DayPicker(days: Set<Int>, onChange: (Set<Int>) -> Unit) {
     }
     Text(if (days.isEmpty()) "Rings once" else "Repeats · ${repeatText(days)}", style = MaterialTheme.typography.bodyMedium,
       color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      listOf("Weekdays" to (1..5).toSet(), "Weekends" to setOf(6, 7), "Every day" to (1..7).toSet(), "Once" to emptySet()).forEach { (label, set) ->
+        SuggestionChip(onClick = { onChange(set) }, label = { Text(label) })
+      }
+    }
   }
 }
 
@@ -448,6 +467,40 @@ internal fun TaskDemoDialog(task: TaskDraft, onClose: () -> Unit) {
         }
       }
     }
+  }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun RoutineSheet(routines: List<Routine>, onApply: (Routine) -> Unit, onDelete: (String) -> Unit, onSave: (String) -> Unit) {
+  var name by rememberSaveable { mutableStateOf("") }
+  Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 16.dp).navigationBarsPadding()) {
+    Text("Routines", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp))
+    Text("Applying keeps this alarm's time, days, name and on/off switch.", style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp))
+    Row(Modifier.padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      OutlinedTextField(name, { name = it.take(80) }, Modifier.weight(1f), label = { Text("Save this alarm as…") }, singleLine = true,
+        shape = MaterialTheme.shapes.medium)
+      FilledTonalButton(onClick = { onSave(name); name = "" }, enabled = name.isNotBlank()) { Text("Save") }
+    }
+    @Composable fun Row(routine: Routine) {
+      Row(Modifier.fillMaxWidth().clickable { onApply(routine) }.padding(start = 24.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        IconBadge(taskIcon(routine.alarm.dismissTasks.firstOrNull()?.kind ?: "math"), size = 40.dp)
+        Column(Modifier.weight(1f)) {
+          Text(routine.name, style = MaterialTheme.typography.titleMedium)
+          Text(routine.summary(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (!routine.starter) IconButton(onClick = { onDelete(routine.id) }) { Ico(R.drawable.ic_delete, "Delete ${routine.name}") }
+      }
+    }
+    if (routines.isNotEmpty()) {
+      Text("Saved", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 24.dp, top = 16.dp))
+      routines.forEach { Row(it) }
+    }
+    Text("Starters", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 24.dp, top = 16.dp))
+    StarterRoutines.forEach { Row(it) }
   }
 }
 

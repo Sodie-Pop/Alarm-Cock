@@ -56,7 +56,8 @@ internal fun dayName(day: Int): String = DayOfWeek.of(day).getDisplayName(TextSt
 internal fun nextRing(alarm: AlarmDraft, now: Long = System.currentTimeMillis()): Long? {
   val hour = alarm.hour.toIntOrNull()?.takeIf { it in 0..23 } ?: return null
   val minute = alarm.minute.toIntOrNull()?.takeIf { it in 0..59 } ?: return null
-  return Timing.next(hour, minute, alarm.days, ZonedDateTime.ofInstant(Instant.ofEpochMilli(now), ZoneId.systemDefault()))
+  return Timing.next(hour, minute, alarm.days, ZonedDateTime.ofInstant(Instant.ofEpochMilli(now), ZoneId.systemDefault()),
+    pauseUntil = maxOf(alarm.pauseUntil, alarm.notBefore), skipDate = alarm.skipDate)
 }
 
 internal fun taskIcon(kind: String) = when (kind) {

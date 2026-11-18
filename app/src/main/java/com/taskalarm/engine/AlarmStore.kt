@@ -14,6 +14,7 @@ internal class AlarmStore(context: Context) {
   }
   fun find(id: String) = alarms().find { it.getString("id") == id }
   fun put(alarm: JSONObject) = write(alarms().filterNot { it.getString("id") == alarm.getString("id") } + alarm)
+  fun putAll(added: List<JSONObject>) = write(alarms().filterNot { old -> added.any { it.getString("id") == old.getString("id") } } + added)
   fun delete(id: String) = write(alarms().filterNot { it.getString("id") == id })
   private fun write(alarms: List<JSONObject>) {
     check(prefs.edit().putString("alarms", JSONArray(alarms).toString()).commit()) { "Unable to save alarms" }
@@ -24,6 +25,13 @@ internal class AlarmStore(context: Context) {
   }
   fun sessions(value: List<JSONObject>) {
     check(prefs.edit().putString("sessions", JSONArray(value).toString()).commit()) { "Unable to save task progress" }
+  }
+  fun routines(): MutableList<JSONObject> {
+    val array = JSONArray(prefs.getString("routines", "[]"))
+    return (0 until array.length()).map { array.getJSONObject(it) }.toMutableList()
+  }
+  fun routines(value: List<JSONObject>) {
+    check(prefs.edit().putString("routines", JSONArray(value).toString()).commit()) { "Unable to save routines" }
   }
   fun checks(): MutableList<JSONObject> {
     val array = JSONArray(prefs.getString("wake_checks", "[]"))

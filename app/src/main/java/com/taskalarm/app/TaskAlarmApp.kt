@@ -45,9 +45,10 @@ internal fun TaskAlarmApp(activity: MainActivity) {
         finally { busy = false }
       }
     }
+    fun toast(message: String) { scope.launch { snackbar.currentSnackbarData?.dismiss(); snackbar.showSnackbar(message) } }
     fun announce(alarm: AlarmDraft) {
       val next = nextRing(alarm) ?: return
-      scope.launch { snackbar.currentSnackbarData?.dismiss(); snackbar.showSnackbar("Alarm set for ${durationText(next - System.currentTimeMillis())} from now") }
+      toast("Alarm set for ${durationText(next - System.currentTimeMillis())} from now")
     }
     LaunchedEffect(Unit) {
       activity.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -124,6 +125,11 @@ internal fun TaskAlarmApp(activity: MainActivity) {
             }
           }, { error = it }) },
           onTestEscalation = { prepareAndRun(true, escalation = true) },
+          routines = routinesFrom(state?.optJSONArray("routines")),
+          onSaveRoutine = { name -> val current = draft
+            work { withContext(Dispatchers.IO) { activity.engine.saveRoutine(null, name, current.json().toString()) }
+              toast("Saved routine \"${name.trim()}\"") } },
+          onDeleteRoutine = { id -> work { withContext(Dispatchers.IO) { activity.engine.deleteRoutine(id) } } },
           onEnroll = { action, id -> if (!busy) scanAction = { value ->
             draftJson?.let { saved ->
               val current = AlarmDraft.from(JSONObject(saved))
@@ -142,7 +148,13 @@ internal fun TaskAlarmApp(activity: MainActivity) {
           onDelete = { deleteTarget = it },
           onTest = { alarm -> work { withContext(Dispatchers.IO) { activity.engine.test(alarm.json().toString()) } } },
           onAccess = { kind -> try { activity.openAccess(kind) } catch (failure: Exception) { error = failure.message } },
-          onSettings = { showSettings = true })
+          onSettings = { showSettings = true },
+          onSkip = { alarm, skip -> work { withContext(Dispatchers.IO) { if (skip) activity.engine.skipNext(alarm.id) else activity.engine.undoSkip(alarm.id) } } },
+          onPause = { alarm, until -> work { withContext(Dispatchers.IO) { activity.engine.pause(alarm.id, until) } } },
+          onDuplicate = { alarm, count, interval -> work {
+            withContext(Dispatchers.IO) { activity.engine.duplicate(alarm.id, count, interval) }
+            toast("Created $count copies of ${alarm.label}")
+          } })
       }
     }
     error?.let { message -> AlertDialog(onDismissRequest = { error = null }, icon = { Ico(R.drawable.ic_warning) },

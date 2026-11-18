@@ -69,7 +69,9 @@ class ScreenshotTest {
   @Test @Config(qualifiers = "w412dp-h915dp-420dpi")
   fun phoneScreens() {
     start()
-    val alarms = listOf(stored(morning, now + 7 * 3_600_000L + 57 * 60_000L), stored(weekend, now + 3 * 86_400_000L), stored(nap, null))
+    val skipDate = java.time.LocalDate.now().plusDays(3).toString()
+    val alarms = listOf(stored(morning.copy(skipDate = skipDate), now + 7 * 3_600_000L + 57 * 60_000L),
+      stored(weekend.copy(pauseUntil = now + 10 * 86_400_000L), now + 10 * 86_400_000L), stored(nap, null))
     val check = JSONObject().put("sessionId", "w1").put("label", "Work").put("dueAt", now + 300_000).put("deadlineAt", now + 600_000).put("stage", "scheduled")
     for (dark in listOf(true, false)) {
       capture("home", dark) { HomeScreen(homeState(alarms), false, SnackbarHostState(), now, {}, {}, { _, _ -> }, {}, {}, {}) }
@@ -93,6 +95,9 @@ class ScreenshotTest {
       val issues = JSONObject().put("exactAlarmsAutomatic", true).put("notifications", false).put("backgroundRestricted", true)
         .put("alarmVolume", 0).put("alarmVolumeMax", 7).put("cameraPermission", false)
       capture("settings-issues", dark) { SettingsScreen(issues, "0.4.0", {}, {}) }
+      capture("sheet-routines", dark) {
+        Box(Modifier.padding(top = 24.dp)) { RoutineSheet(listOf(Routine("r1", "Gym days", morning)), {}, {}, {}) }
+      }
       capture("sheet-add", dark) { Box(Modifier.padding(top = 24.dp)) { AddTaskSheet {} } }
       capture("sheet-sound", dark) { Box(Modifier.padding(top = 24.dp)) { SoundSheet(morning.copy(soundUri = "content://x", soundName = "Birdsong.mp3"), {}, {}, {}) } }
     }
