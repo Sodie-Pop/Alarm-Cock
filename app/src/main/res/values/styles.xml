@@ -1,10 +1,7 @@
 <resources>
-  <style name="AppTheme" parent="android:style/Theme.Material.NoActionBar">
-    <item name="android:fontFamily">sans</item>
-    <item name="android:windowLightStatusBar">false</item>
-    <item name="android:statusBarColor">#11131b</item>
-    <item name="android:navigationBarColor">#11131b</item>
-    <item name="android:windowBackground">#11131b</item>
-    <item name="android:colorAccent">#ffca7a</item>
+  <!-- Window theme only; Compose draws the UI edge to edge (see TaskAlarmTheme). -->
+  <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+    <item name="android:windowBackground">#fbf8f4</item>
+    <item name="android:colorAccent">#8a5100</item>
   </style>
 </resources>

@@ -29,7 +29,7 @@ class WakeCheckFlowTest {
   private var time = 0L
   @Before fun setup() {
     context = RuntimeEnvironment.getApplication()
-    context.getSharedPreferences("task_alarm_v1", 0).edit().clear().commit()
+    context.createDeviceProtectedStorageContext().getSharedPreferences("task_alarm_v1", 0).edit().clear().commit()
     store = AlarmStore(context)
     time = System.currentTimeMillis()
     engine = AlarmEngine(context) { time }

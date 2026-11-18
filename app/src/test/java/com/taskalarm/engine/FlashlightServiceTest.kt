@@ -23,7 +23,7 @@ import org.robolectric.shadows.ShadowCameraCharacteristics
 class FlashlightServiceTest {
   @Test fun serviceKeepsLightOnWhenMutedPausesForScannerAndReleasesItWhenStopped() {
     val context: Application = RuntimeEnvironment.getApplication()
-    context.getSharedPreferences("task_alarm_v1", 0).edit().clear().commit()
+    context.createDeviceProtectedStorageContext().getSharedPreferences("task_alarm_v1", 0).edit().clear().commit()
     shadowOf(context).grantPermissions(Manifest.permission.CAMERA)
     shadowOf(context.packageManager).setSystemFeature(PackageManager.FEATURE_CAMERA_FLASH, true)
     val cameras = shadowOf(context.getSystemService(CameraManager::class.java))

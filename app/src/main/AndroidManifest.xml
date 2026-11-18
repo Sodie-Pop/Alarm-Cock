@@ -2,26 +2,38 @@
   <uses-permission android:name="android.permission.CAMERA" />
   <uses-feature android:name="android.hardware.camera.any" android:required="false" />
   <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
-  <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+  <!-- Alarm clocks may hold USE_EXACT_ALARM (API 33+): granted at install and not revocable, so the OS cannot
+       silently cancel every scheduled alarm by revoking it. SCHEDULE_EXACT_ALARM covers API 31-32. -->
+  <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+  <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
   <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
   <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <uses-permission android:name="android.permission.VIBRATE" />
+  <!-- Walking tasks read the step sensor. -->
+  <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+  <uses-feature android:name="android.hardware.sensor.stepdetector" android:required="false" />
+  <uses-feature android:name="android.hardware.sensor.light" android:required="false" />
   <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
   <application android:label="Task Alarm" android:icon="@drawable/ic_alarm" android:theme="@style/AppTheme" android:allowBackup="false" android:fullBackupContent="false" android:dataExtractionRules="@xml/data_extraction_rules" android:supportsRtl="true">
-    <activity android:name="com.taskalarm.app.MainActivity" android:exported="true" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize">
+    <!-- Portrait only: rotating mid-task (especially the tilt maze) helps nobody. -->
+    <activity android:name="com.taskalarm.app.MainActivity" android:exported="true" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize"
+      android:screenOrientation="portrait">
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
         <category android:name="android.intent.category.LAUNCHER" />
       </intent-filter>
     </activity>
-    <service android:name="com.taskalarm.engine.RingingService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
-    <receiver android:name="com.taskalarm.engine.AlarmReceiver" android:exported="false" />
-    <receiver android:name="com.taskalarm.engine.WakeCheckReceiver" android:exported="false" />
-    <receiver android:name="com.taskalarm.engine.RestoreReceiver" android:exported="false">
+    <!-- Delivery components are direct-boot aware so alarms restore and ring before the first unlock after a reboot. -->
+    <service android:name="com.taskalarm.engine.RingingService" android:exported="false" android:directBootAware="true" android:foregroundServiceType="mediaPlayback" />
+    <receiver android:name="com.taskalarm.engine.AlarmReceiver" android:exported="false" android:directBootAware="true" />
+    <receiver android:name="com.taskalarm.engine.WakeCheckReceiver" android:exported="false" android:directBootAware="true" />
+    <receiver android:name="com.taskalarm.engine.RestoreReceiver" android:exported="false" android:directBootAware="true">
       <intent-filter>
+        <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
         <action android:name="android.intent.action.BOOT_COMPLETED" />
         <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
         <action android:name="android.intent.action.TIME_SET" />

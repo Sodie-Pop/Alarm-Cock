@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Built-in sounds are played by name (builtin:<id> → android.resource://…/raw/<id>), so resource shrinking must keep them. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@raw/beacon,@raw/pulse,@raw/chime" />

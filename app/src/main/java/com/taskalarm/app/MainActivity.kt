@@ -12,6 +12,8 @@ import android.provider.Settings
 import android.view.WindowManager
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
@@ -30,6 +32,7 @@ class MainActivity : ComponentActivity() {
   private var soundError: ((String) -> Unit)? = null
   private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
   private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+  private val activityPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
   private val documentPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
     if (uri != null) importSound(uri)
   }
@@ -42,8 +45,11 @@ class MainActivity : ComponentActivity() {
   }
 
   override fun onCreate(savedInstanceState: Bundle?) {
+    enableEdgeToEdge()
     super.onCreate(savedInstanceState)
     volumeControlStream = AudioManager.STREAM_ALARM
+    // Force stop (and some OEM task killers) cancel every platform alarm without telling the app.
+    try { engine.rearm() } catch (error: RuntimeException) { android.util.Log.e("TaskAlarm", "Unable to re-arm alarms", error) }
     updateAlarmWindow()
     setContent { TaskAlarmApp(this) }
   }
@@ -59,6 +65,11 @@ class MainActivity : ComponentActivity() {
     if (session?.optBoolean("muted") == true) {
       try { engine.setMuted(session.getString("sessionId"), false) } catch (_: RuntimeException) { }
     }
+  }
+  /** Ringing, wake-up check and scanner screens are always dark, so they need light system-bar icons. */
+  internal fun setImmersiveBars(dark: Boolean) {
+    if (dark) enableEdgeToEdge(SystemBarStyle.dark(android.graphics.Color.TRANSPARENT), SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
+    else enableEdgeToEdge()
   }
   internal fun updateAlarmWindow() {
     val store = AlarmStore(this)
@@ -78,6 +89,7 @@ class MainActivity : ComponentActivity() {
   override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean = if (guardVolumeKey(keyCode)) true else super.onKeyUp(keyCode, event)
   internal fun openAccess(kind: String) {
     if (kind == "camera") { cameraPermission.launch(Manifest.permission.CAMERA); return }
+    if (kind == "activity") { if (Build.VERSION.SDK_INT >= 29) activityPermission.launch(Manifest.permission.ACTIVITY_RECOGNITION); return }
     if (kind in listOf("notifications", "wakeNotifications") && Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
       notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS); return
     }
@@ -85,12 +97,14 @@ class MainActivity : ComponentActivity() {
       "appSettings" -> Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).setData(Uri.parse("package:$packageName"))
       "exact" -> if (Build.VERSION.SDK_INT >= 31) Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM) else return
       "fullScreen" -> if (Build.VERSION.SDK_INT >= 34) Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT) else return
+      "volume" -> Intent(Settings.ACTION_SOUND_SETTINGS)
       "wakeNotifications" -> Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName).putExtra(Settings.EXTRA_CHANNEL_ID, WakeChecks.CHANNEL)
       else -> Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
     }
     if (kind in listOf("exact", "fullScreen")) intent.data = Uri.parse("package:$packageName")
     startActivity(intent)
   }
+  internal fun versionName(): String = packageManager.getPackageInfo(packageName, 0).versionName ?: ""
   internal fun setBarcodeScanning(active: Boolean) {
     if (synchronized(AlarmEngine.LOCK) { AlarmStore(this).sessions().isEmpty() }) return
     startForegroundService(Intent(this, RingingService::class.java).putExtra("scannerActive", active))

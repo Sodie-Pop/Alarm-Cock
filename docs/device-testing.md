@@ -12,6 +12,41 @@ No physical-device checks have been executed in the cloud environment. Record de
 - Kill the process without Android force stop while ringing; confirm service/audio recovery and retained task progress. Reboot while ringing and confirm the stored session resumes when opening the app.
 - Revoke exact-alarm permission, notifications, and full-screen access individually. Verify readiness warnings, enabling failures, and regrant/rescheduling. Confirm no permission denial is presented as a successfully enabled alarm.
 
+## Closed-app safeguards (0.4.0)
+
+- Upgrade from 0.3.0 without clearing data. On Android 13+, confirm Settings → Apps → Task Alarm → Alarms & reminders shows access granted and cannot be turned off.
+- Schedule an alarm 3 minutes ahead, then use Settings → Apps → Task Alarm → Force stop. Confirm it does **not** ring (expected Android behavior). Repeat, but open the app once after force stop: it must ring on time. Also check `adb shell dumpsys alarm | grep -A3 com.taskalarm` before and after opening.
+- Open the app within a minute after a force-stopped alarm's time; it must ring immediately rather than skip to the next day.
+- While ringing (screen off, app not visible), swipe the app from recents. Ringing must continue or resume within about 5 seconds. Then `adb shell am kill com.taskalarm.app` (or `kill` the process with `adb shell`) while ringing; ringing must resume within about a minute with task progress intact.
+- Reboot while ringing and **do not unlock**; ringing must resume within seconds (default sound, "Unlock your phone" notification text). Unlock and complete the tasks.
+- Schedule an alarm 5 minutes ahead using a custom imported sound, reboot, and leave the phone locked. It must ring on time with the default alarm sound or beep. Repeat after unlocking (custom sound must play). Compare `adb shell dumpsys alarm` before and after unlock.
+- Upgrade from 0.3.0 without clearing data, then reboot without unlocking: note whether alarms ring (migration happens only after the app runs once unlocked). Open the app once and repeat; they must ring.
+- Set Battery usage to Restricted, schedule an alarm, and close the app. Record whether normal ringing or the repeating backup notification appears; opening the notification must start normal ringing. Confirm the next repeat is still scheduled. Restore Battery usage afterward.
+- Choose an imported sound, delete/rename it so playback fails, and ring with the screen off for 5+ minutes; the fallback beep must keep going.
+- Dismiss and snooze alarms; confirm `adb shell dumpsys alarm` shows no leftover `taskalarm://ringing/backstop` alarm and the lock screen's next-alarm time returns to the real next alarm.
+
+## Settings page (0.4.1)
+
+- Open Settings from the gear. With everything granted, the summary must say alarms are ready and every row shows a green status.
+- Turn off alarm notifications, set Battery usage to Restricted, and mute the alarm volume; each must show a red status, the summary and gear badge must count them, and each button must open the matching Android screen. Restore them and confirm the page updates within a second of returning.
+
+## Tasks, sounds and scheduling (0.5.0)
+
+- **Memory:** each difficulty shows 3/5/7 flashes; wrong input keeps the same sequence; Show again works; a new sequence each round.
+- **Breakout:** the timer only advances while dragging the paddle; stop for 20 s and it resets; completes at the configured time (try 30 s).
+- **Maze:** tilt mode in portrait and landscape, Set level, arrow-button mode; checkpoints only count in order; it mirrors between rounds.
+- **Walking:** first use asks for Physical activity; deny it and confirm the fallback button; walk 20 steps with the screen on; steps taken with the app in the background must not count.
+- **Light:** cover the sensor, then turn on a light; the hold survives steady light without readings; dimming resets it; the alarm flashlight turns off during this task and back on afterwards.
+- Use **Try it** for every task type from the editor.
+- **Snooze limit 2:** snooze twice (completing snooze tasks), confirm the third ring has no Snooze; tomorrow's regular ring has 2 again. Turn Allow snooze off and confirm no Snooze appears (including Test).
+- **Shuffle**, **Harder after each snooze**, **Vibrate** (also while muted), **Moving Dismiss** (jumps every 5 s, never under Snooze), **random wake-up delay** (several dismissals land at different times within the range).
+- **Escalation:** set 1 minute; leave the alarm ringing; confirm full volume and a sound change every 45 s through the playlist; turning volume down is undone; dismissing restores your previous volume. Try an imported sound and a phone sound in the playlist, Test escalation, and escalation carrying into a snoozed ring.
+- **Built-in sounds:** pick Beacon/Pulse/Chime as the alarm sound; after a restart without unlocking, an alarm still plays a real sound (Beacon or the phone default).
+- **Skip next** on a weekday alarm (card says Skipping…, the following weekday rings; Undo works). **Pause until** a date (rings from that date; Resume works). Neither may disturb an active snooze or pending wake-up check.
+- **Duplicate** 5 copies every 5 minutes, and a series that crosses midnight (copies after midnight roll to the next weekday and never ring before the original).
+- **Routines:** save one, apply it to another alarm (time and name stay), delete it; apply each starter.
+- **Delivery test:** 30 s with the phone locked; 2 min with a restart, leaving the phone at the lock screen; Settings reports the result. Two alarms at the same minute: the second shows as waiting and rings after the first.
+
 ## Task completion
 
 - Try easy, medium, and hard text and math, checking the examples in setup against generated task styles. Wrong answers must not advance; text case and symbols must match exactly.

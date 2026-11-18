@@ -13,14 +13,29 @@ android {
         applicationId = "com.taskalarm.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.3.0"
+        versionCode = 8
+        versionName = "0.5.1"
     }
     buildFeatures { compose = true }
     testOptions { unitTests.isIncludeAndroidResources = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+    // The owner's phone has builds signed with a dedicated debug key that is kept out of git (the repo is public).
+    // Put it at signing/task-alarm-debug.keystore (ignored by *.keystore) so APKs install over the existing app.
+    val sharedDebugKey = rootProject.file("signing/task-alarm-debug.keystore")
+    signingConfigs {
+        getByName("debug") {
+            if (sharedDebugKey.exists()) {
+                storeFile = sharedDebugKey
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            } else {
+                logger.warn("WARNING: signing/task-alarm-debug.keystore not found; this debug APK will NOT install over the existing app.")
+            }
+        }
     }
     buildTypes {
         getByName("release") { isMinifyEnabled = false }
@@ -54,4 +69,6 @@ dependencies {
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.16.1")
+    testImplementation("androidx.compose.ui:ui-test-junit4:1.10.5")
+    debugImplementation("androidx.compose.ui:ui-test-manifest:1.10.5")
 }
