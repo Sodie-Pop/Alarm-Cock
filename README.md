@@ -72,7 +72,7 @@ Use Android Studio with Java 17 or newer, Android SDK 37, and an Android 8.0+ de
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-The debug APK is standalone, embeds the native UI, and uses Android's local debug signing key. It needs no development server. Release signing and Play distribution are not configured; a release build is unsigned.
+The debug APK is standalone and embeds the native UI. From 0.4.0 it is signed with a dedicated debug key kept outside git at `signing/task-alarm-debug.keystore` (the repository is public); without that file Gradle warns and falls back to the machine's own debug key, which will not install over an existing install. It needs no development server. Release signing and Play distribution are not configured; a release build is unsigned.
 
 For the retained cloud tools, activate `. /workspace/.onboarding/env.sh` in each shell. Its proxy helper remains outside this repository:
 
@@ -112,7 +112,7 @@ There is no backend, downloadable catalog, JavaScript game host, OTA task distri
 
 On 2026-10-16, `:app:assembleDebug`, `:app:testDebugUnitTest`, and `:app:lintDebug` passed. All 46 tests passed, including Robolectric wake-up lifecycle, torch timing/failure, and ringing-service integration tests on API 28. Lint reported zero errors and 17 warnings, including diagnostics for the alarm-lifetime flashlight wake lock; the service releases that lock when paused or stopped. APK signature verification and ZIP integrity checks passed. The standalone universal debug APK is approximately 36 MiB and includes ARM64, ARMv7, x86, and x86_64 native libraries.
 
-The user reported that basic ringing and task dismissal worked in 0.1.0. The volume controls, wake-up checks, advance reminders, and 0.3.0 flashlight modes still require physical-device verification, especially Doze, notification actions, and reboot recovery. The 0.3.0 signing certificate matches 0.2.1, 0.2.0, and 0.1.0 for installation over the existing app.
+The user reported that basic ringing and task dismissal worked in 0.1.0. The volume controls, wake-up checks, advance reminders, and 0.3.0 flashlight modes still require physical-device verification, especially Doze, notification actions, and reboot recovery. 0.4.0 uses a new signing key (the original key was not available), so upgrading from 0.3.0 requires uninstalling first; later builds signed with the dedicated key install over 0.4.0.
 
 ## Browser download
 

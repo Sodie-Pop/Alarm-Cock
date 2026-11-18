@@ -22,6 +22,21 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    // The owner's phone has builds signed with a dedicated debug key that is kept out of git (the repo is public).
+    // Put it at signing/task-alarm-debug.keystore (ignored by *.keystore) so APKs install over the existing app.
+    val sharedDebugKey = rootProject.file("signing/task-alarm-debug.keystore")
+    signingConfigs {
+        getByName("debug") {
+            if (sharedDebugKey.exists()) {
+                storeFile = sharedDebugKey
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            } else {
+                logger.warn("WARNING: signing/task-alarm-debug.keystore not found; this debug APK will NOT install over the existing app.")
+            }
+        }
+    }
     buildTypes {
         getByName("release") { isMinifyEnabled = false }
     }

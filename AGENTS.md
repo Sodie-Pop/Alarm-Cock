@@ -55,5 +55,10 @@ not the material-icons-extended library.
 
 ## Release safety
 
-The user installs debug builds over the existing app; the signing key must stay the same as earlier versions
-(it is not in the repo). Bump `versionCode`/`versionName` in `app/build.gradle.kts` for user-facing releases.
+The user installs debug builds over the existing app, so every APK meant for their phone must be signed with the
+dedicated key at `signing/task-alarm-debug.keystore` (certificate SHA-256 `b35e88b5…8b1014`, CN=Task Alarm Debug).
+The repo is public, so the key is **never committed** (`*.keystore` is gitignored); the user keeps the file and
+uploads it when needed. If it's missing, Gradle prints `WARNING: signing/task-alarm-debug.keystore not found` and
+the APK falls back to a throwaway key that will not install over their app. Ask the user for the file before
+handing over an APK. Tests and lint don't need it. Bump `versionCode`/`versionName` in `app/build.gradle.kts` for
+user-facing releases.
