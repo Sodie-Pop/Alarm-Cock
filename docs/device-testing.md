@@ -30,6 +30,23 @@ No physical-device checks have been executed in the cloud environment. Record de
 - Open Settings from the gear. With everything granted, the summary must say alarms are ready and every row shows a green status.
 - Turn off alarm notifications, set Battery usage to Restricted, and mute the alarm volume; each must show a red status, the summary and gear badge must count them, and each button must open the matching Android screen. Restore them and confirm the page updates within a second of returning.
 
+## Tasks, sounds and scheduling (0.5.0)
+
+- **Memory:** each difficulty shows 3/5/7 flashes; wrong input keeps the same sequence; Show again works; a new sequence each round.
+- **Breakout:** the timer only advances while dragging the paddle; stop for 20 s and it resets; completes at the configured time (try 30 s).
+- **Maze:** tilt mode in portrait and landscape, Set level, arrow-button mode; checkpoints only count in order; it mirrors between rounds.
+- **Walking:** first use asks for Physical activity; deny it and confirm the fallback button; walk 20 steps with the screen on; steps taken with the app in the background must not count.
+- **Light:** cover the sensor, then turn on a light; the hold survives steady light without readings; dimming resets it; the alarm flashlight turns off during this task and back on afterwards.
+- Use **Try it** for every task type from the editor.
+- **Snooze limit 2:** snooze twice (completing snooze tasks), confirm the third ring has no Snooze; tomorrow's regular ring has 2 again. Turn Allow snooze off and confirm no Snooze appears (including Test).
+- **Shuffle**, **Harder after each snooze**, **Vibrate** (also while muted), **Moving Dismiss** (jumps every 5 s, never under Snooze), **random wake-up delay** (several dismissals land at different times within the range).
+- **Escalation:** set 1 minute; leave the alarm ringing; confirm full volume and a sound change every 45 s through the playlist; turning volume down is undone; dismissing restores your previous volume. Try an imported sound and a phone sound in the playlist, Test escalation, and escalation carrying into a snoozed ring.
+- **Built-in sounds:** pick Beacon/Pulse/Chime as the alarm sound; after a restart without unlocking, an alarm still plays a real sound (Beacon or the phone default).
+- **Skip next** on a weekday alarm (card says Skipping…, the following weekday rings; Undo works). **Pause until** a date (rings from that date; Resume works). Neither may disturb an active snooze or pending wake-up check.
+- **Duplicate** 5 copies every 5 minutes, and a series that crosses midnight (copies after midnight roll to the next weekday and never ring before the original).
+- **Routines:** save one, apply it to another alarm (time and name stay), delete it; apply each starter.
+- **Delivery test:** 30 s with the phone locked; 2 min with a restart, leaving the phone at the lock screen; Settings reports the result. Two alarms at the same minute: the second shows as waiting and rings after the first.
+
 ## Task completion
 
 - Try easy, medium, and hard text and math, checking the examples in setup against generated task styles. Wrong answers must not advance; text case and symbols must match exactly.

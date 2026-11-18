@@ -30,7 +30,7 @@ import java.time.format.FormatStyle
 @Composable
 internal fun RingingScreen(active: JSONObject, busy: Boolean, answerError: String?, now: Long,
   onAction: (String) -> Unit, onSubmit: (String) -> Unit, onScan: () -> Unit, onMute: (Boolean) -> Unit, onAnswerEdit: () -> Unit,
-  onComplete: () -> Unit = {}, onFallback: () -> Unit = {}) {
+  onComplete: () -> Unit = {}, onFallback: () -> Unit = {}, waiting: List<String> = emptyList(), wakePending: Boolean = false) {
   val alarm = AlarmDraft.from(active.getJSONObject("alarm"))
   val action = if (active.isNull("action")) null else active.getString("action")
   val test = active.optBoolean("test")
@@ -51,6 +51,9 @@ internal fun RingingScreen(active: JSONObject, busy: Boolean, answerError: Strin
       }
       val notices = @Composable {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+          if (waiting.isNotEmpty()) Notice("${waiting.size} more waiting · next: ${waiting.first()}. Each still needs its tasks.",
+            R.drawable.ic_alarm_clock, MaterialTheme.colorScheme.secondary)
+          if (wakePending) Notice("A wake-up check is waiting — it opens when this alarm is done.", R.drawable.ic_wb_sunny, MaterialTheme.colorScheme.secondary)
           if (active.optBoolean("escalated")) Notice("Escalated · full volume" + active.optString("escalationToneName").let { if (it.isEmpty()) "" else " · $it" },
             R.drawable.ic_campaign, MaterialTheme.colorScheme.primary)
           if (active.optBoolean("volumeGuardBlocked")) Notice("Android blocked the volume guard. Check your alarm volume.")

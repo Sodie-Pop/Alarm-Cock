@@ -65,7 +65,10 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
     val pending = store.checks().map { JSONObject().put("sessionId", it.getString("sessionId"))
       .put("label", it.getJSONObject("alarm").getString("label")).put("dueAt", it.getLong("dueAt"))
       .put("deadlineAt", it.getLong("deadlineAt")).put("stage", it.getString("stage")).put("test", it.optBoolean("test")) }
-    JSONObject().put("alarms", JSONArray(store.alarms())).put("active", active ?: JSONObject.NULL).put("routines", JSONArray(store.routines()))
+    val waitingAlarms = store.sessions().drop(1).map { it.getJSONObject("alarm").getString("label") }
+    JSONObject().put("alarms", JSONArray(store.alarms().filterNot { it.optBoolean("deliveryTest") })).put("active", active ?: JSONObject.NULL)
+      .put("routines", JSONArray(store.routines())).put("waiting", JSONArray(waitingAlarms))
+      .put("deliveryTest", store.deliveryTest() ?: JSONObject.NULL)
       .put("wakeCheck", wakeChecks.visible() ?: JSONObject.NULL).put("wakeChecks", JSONArray(pending))
       .put("readiness", readiness()).toString()
   }
@@ -203,6 +206,26 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
     copies.map { it.getString("id") }
   }
 
+  /**
+   * Schedules a hidden test alarm through the same exact-alarm path as real ones, [seconds] from now (30, or 120 to
+   * leave time for a restart). Stored as a pending one-off "snooze" so restores keep its exact time.
+   */
+  fun testDelivery(seconds: Int) = synchronized(LOCK) {
+    require(seconds == 30 || seconds == 120)
+    val access = readiness()
+    check(access.getBoolean("exactAlarms")) { "Allow Alarms & reminders first" }
+    check(access.getBoolean("notifications")) { "Allow alarm notifications first" }
+    store.alarms().filter { it.optBoolean("deliveryTest") }.forEach { manager.cancel(receiver(it.getString("id"))); store.delete(it.getString("id")) }
+    val at = now() + seconds * 1000L
+    val time = Instant.ofEpochMilli(at).atZone(ZoneId.systemDefault())
+    val alarm = JSONObject().put("id", "delivery-test-" + UUID.randomUUID()).put("label", "Alarm delivery test")
+      .put("hour", time.hour.toString().padStart(2, '0')).put("minute", time.minute.toString().padStart(2, '0'))
+      .put("days", JSONArray()).put("enabled", true).put("snoozeMinutes", 5).put("dismissTasks", JSONArray()).put("snoozeTasks", JSONArray())
+      .put("deliveryTest", true).put("snoozed", true).put("nextAt", at)
+    schedule(alarm); store.put(alarm)
+    store.deliveryTest(JSONObject().put("status", "scheduled").put("scheduledAt", at).put("seconds", seconds))
+  }
+
   // ---- Morning routines: named sets of tasks and settings that can be applied to any alarm.
 
   fun saveRoutine(id: String?, name: String, alarmJson: String): String = synchronized(LOCK) {
@@ -238,6 +261,11 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
   fun fire(id: String) = synchronized(LOCK) {
     val alarm = store.find(id) ?: return@synchronized
     if (!alarm.getBoolean("enabled") || alarm.optLong("nextAt", Long.MAX_VALUE) > now() + 2000) return@synchronized
+    if (alarm.optBoolean("deliveryTest")) {
+      store.delete(id)
+      store.deliveryTest()?.let { store.deliveryTest(it.put("status", "delivered").put("deliveredAt", now())) }
+      enqueue(alarm, true); ring(); return@synchronized
+    }
     wakeChecks.cancelForAlarm(id)
     // A regular occurrence starts with a fresh snooze count; snoozed rings and wake-up retries keep it.
     if (!alarm.optBoolean("snoozed") && !alarm.optBoolean("wakeRetry")) { alarm.put("snoozeCount", 0); alarm.remove("escalationLatched") }
@@ -387,6 +415,7 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
         schedule(base); store.put(base)
       } else wakeChecks.schedule(base)
     }
+    if (base.optBoolean("deliveryTest")) store.deliveryTest()?.let { store.deliveryTest(it.put("status", "acknowledged")) }
     sessions.removeAt(0); store.sessions(sessions)
     if (sessions.isEmpty()) {
       cancelBackstop(); FallbackAlert.cancel(context)

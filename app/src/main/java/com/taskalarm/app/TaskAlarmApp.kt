@@ -105,7 +105,9 @@ internal fun TaskAlarmApp(activity: MainActivity) {
           onMute = { muted -> work { withContext(Dispatchers.IO) { activity.engine.setMuted(active.getString("sessionId"), muted) } } },
           onAnswerEdit = { answerError = null },
           onComplete = { work { withContext(Dispatchers.IO) { activity.engine.complete(active.getString("sessionId"), active.getString("challengeId")) } } },
-          onFallback = { work { withContext(Dispatchers.IO) { activity.engine.fallback(active.getString("sessionId"), active.getString("challengeId")) } } })
+          onFallback = { work { withContext(Dispatchers.IO) { activity.engine.fallback(active.getString("sessionId"), active.getString("challengeId")) } } },
+          waiting = state?.optJSONArray("waiting")?.let { array -> (0 until array.length()).map { array.getString(it) } } ?: emptyList(),
+          wakePending = wakeCheck != null)
         wakeCheck != null -> WakeCheckScreen(wakeCheck, busy, answerError, now,
           onReply = { awake -> work { withContext(Dispatchers.IO) { activity.engine.respondWake(wakeCheck.getString("sessionId"), awake) } } },
           onSubmit = { submit(wakeCheck, true, it) }, onScan = { scanAction = { submit(wakeCheck, true, it) } },
@@ -137,7 +139,12 @@ internal fun TaskAlarmApp(activity: MainActivity) {
             }
           } })
         showSettings -> SettingsScreen(state?.optJSONObject("readiness"), remember { activity.versionName() }, onBack = { showSettings = false },
-          onAccess = { kind -> try { activity.openAccess(kind) } catch (failure: Exception) { error = failure.message } })
+          onAccess = { kind -> try { activity.openAccess(kind) } catch (failure: Exception) { error = failure.message } },
+          deliveryTest = state?.optJSONObject("deliveryTest"), now = now,
+          onTestDelivery = { seconds -> work {
+            withContext(Dispatchers.IO) { activity.engine.testDelivery(seconds) }
+            toast(if (seconds == 30) "Test alarm in 30 seconds — lock your phone now" else "Test alarm in 2 minutes — restart your phone now")
+          } })
         else -> HomeScreen(state, busy, snackbar, now,
           onAdd = { draftIsNew = true; draftJson = AlarmDraft().json().toString() },
           onEdit = { draftIsNew = false; draftJson = it.json().toString() },

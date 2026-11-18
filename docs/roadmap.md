@@ -20,7 +20,7 @@ Store installed bundles in app-private persistent storage. Download and verify e
 
 Use a catalog over HTTPS with signed manifests, content hashes, download size limits, runtime compatibility checks, atomic installation, and a last-working-version rollback. No server or signing configuration is present in this milestone. Never hot-reload a running task or replace its assets during an alarm. Downloading or connectivity loss must not block an already configured alarm.
 
-Declarative tasks supported by the installed native engine, compatible game bundles, and sound assets can be candidates for content updates. New Android permissions, task validators, native capabilities, or changes to the Compose application require a new Android binary through the chosen distribution channel. The current native engine recognizes only text, math, and barcode tasks; arbitrary new task kinds cannot be installed into this binary over the air.
+Declarative tasks supported by the installed native engine, compatible game bundles, and sound assets can be candidates for content updates. New Android permissions, task validators, native capabilities, or changes to the Compose application require a new Android binary through the chosen distribution channel. The current native engine recognizes text, math, memory, barcode, Breakout, maze, walking and light tasks; arbitrary new task kinds cannot be installed into this binary over the air.
 
 Use trusted, signed first-party JavaScript content initially. Review Google Play's interpreted-code policy and Android WebView security guidance before enabling dynamic content. Do not add self-updating native APK/DEX downloads as a substitute for store updates.
 

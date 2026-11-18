@@ -64,7 +64,8 @@ internal fun accessGroups(readiness: JSONObject?): AccessGroups {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun SettingsScreen(readiness: JSONObject?, version: String, onBack: () -> Unit, onAccess: (String) -> Unit) {
+internal fun SettingsScreen(readiness: JSONObject?, version: String, onBack: () -> Unit, onAccess: (String) -> Unit,
+  deliveryTest: JSONObject? = null, now: Long = System.currentTimeMillis(), onTestDelivery: (Int) -> Unit = {}) {
   val groups = accessGroups(readiness)
   Scaffold(topBar = {
     TopAppBar(title = { Text("Settings") }, navigationIcon = { IconButton(onClick = onBack) { Ico(R.drawable.ic_arrow_back, "Back") } },
@@ -79,12 +80,38 @@ internal fun SettingsScreen(readiness: JSONObject?, version: String, onBack: () 
       SettingsCard { groups.recommended.forEach { AccessRow(it, onAccess) } }
       SectionHeader("Optional", "Only needed for some features.")
       SettingsCard { groups.optional.forEach { AccessRow(it, onAccess) } }
+      SectionHeader("Delivery test", "Checks that an alarm reaches you with the phone locked.")
+      SettingsCard {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Text("Lock the phone after starting and wait. For the restart test, restart the phone and leave it at the lock screen.",
+            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          deliveryStatus(deliveryTest, now)?.let { (text, ok) ->
+            Notice(text, if (ok) R.drawable.ic_check_circle else R.drawable.ic_info, if (ok) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary)
+          }
+          Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { onTestDelivery(30) }) { Text("Ring in 30 s") }
+            OutlinedButton(onClick = { onTestDelivery(120) }) { Text("Restart test (2 min)") }
+          }
+        }
+      }
       SectionHeader("About")
       SettingsCard {
         NavRow("App info", "Task Alarm $version · Android permissions and storage", R.drawable.ic_info) { onAccess("appSettings") }
       }
       Spacer(Modifier.height(24.dp))
     }
+  }
+}
+
+private fun deliveryStatus(test: JSONObject?, now: Long): Pair<String, Boolean>? {
+  test ?: return null
+  val at = test.optLong("scheduledAt")
+  val time = shortDate(at) + " " + java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(java.util.Date(at))
+  return when (test.optString("status")) {
+    "acknowledged" -> "Last test ($time) rang and was dismissed." to true
+    "delivered" -> "Last test ($time) was delivered." to true
+    "scheduled" -> if (now > at + 60_000) "The test was due at $time but no delivery was recorded." to false else "Test scheduled for $time." to false
+    else -> null
   }
 }
 

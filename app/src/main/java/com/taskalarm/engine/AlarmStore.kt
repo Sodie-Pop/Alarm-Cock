@@ -26,6 +26,8 @@ internal class AlarmStore(context: Context) {
   fun sessions(value: List<JSONObject>) {
     check(prefs.edit().putString("sessions", JSONArray(value).toString()).commit()) { "Unable to save task progress" }
   }
+  fun deliveryTest(): JSONObject? = prefs.getString("delivery_test", null)?.let(::JSONObject)
+  fun deliveryTest(value: JSONObject) { check(prefs.edit().putString("delivery_test", value.toString()).commit()) { "Unable to save test" } }
   fun routines(): MutableList<JSONObject> {
     val array = JSONArray(prefs.getString("routines", "[]"))
     return (0 until array.length()).map { array.getJSONObject(it) }.toMutableList()

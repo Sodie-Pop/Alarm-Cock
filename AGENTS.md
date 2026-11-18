@@ -47,6 +47,12 @@ not the material-icons-extended library.
 - Alarms are scheduled with `AlarmManager.setAlarmClock`; PendingIntents are distinguished by data URI
   (`taskalarm://alarm/<id>`, `taskalarm://wake/<session>/<phase>`, `taskalarm://ringing/backstop`), all with
   request code 0.
+- Task kinds: text, math, memory, barcode (answers checked by `SessionTasks.submit`) and breakout, maze, walk, light
+  (interactive; UI reports completion via `AlarmEngine.complete`, which checks the challenge and `SessionTasks.minimumMs`).
+  Game/sensor logic lives in `Games.kt` (pure Kotlin, `GamesTest`); boards in `TaskBoards.kt`. Sensor tasks must keep
+  offering their math/text fallback (`AlarmEngine.fallback`). New per-task settings go on `TaskDraft` with `opt*` reads.
+- Escalation (`Escalation.kt`, driven by `RingingService.escalationTick`) and built-in sounds (`BuiltinSounds`,
+  `res/raw`, regenerate with `scripts/generate-sounds.py`) are covered by `EscalationTest`.
 - Delivery safeguards (re-arm on launch, ringing backstop, fallback alert, wake locks, direct boot) are covered by
   `DeliveryReliabilityTest` and `DirectBootTest`; delivery components must stay `directBootAware` and must not
   touch credential-protected storage or `getLaunchIntentForPackage` (use `AlarmEngine.launchIntent`); keep them intact when touching `fire()`, `ring()`, `finish()` or `RingingService`.
