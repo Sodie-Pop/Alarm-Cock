@@ -40,6 +40,8 @@ Android requires Camera permission for torch control. The editor provides permis
 
 ## Tasks, sounds and scheduling (0.5.0)
 
+The app is locked to portrait (0.5.1), so the screen never rotates mid-task.
+
 These features were rebuilt from scratch, using the earlier `feature/awake-games` branch only as a behaviour reference.
 
 **Tasks** (any mix, in any action list, each with 1–10 rounds; the engine accepts completion only for the current challenge):

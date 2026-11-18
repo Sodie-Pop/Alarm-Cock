@@ -19,7 +19,9 @@
   <uses-feature android:name="android.hardware.sensor.light" android:required="false" />
   <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
   <application android:label="Task Alarm" android:icon="@drawable/ic_alarm" android:theme="@style/AppTheme" android:allowBackup="false" android:fullBackupContent="false" android:dataExtractionRules="@xml/data_extraction_rules" android:supportsRtl="true">
-    <activity android:name="com.taskalarm.app.MainActivity" android:exported="true" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize">
+    <!-- Portrait only: rotating mid-task (especially the tilt maze) helps nobody. -->
+    <activity android:name="com.taskalarm.app.MainActivity" android:exported="true" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize"
+      android:screenOrientation="portrait">
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
         <category android:name="android.intent.category.LAUNCHER" />
