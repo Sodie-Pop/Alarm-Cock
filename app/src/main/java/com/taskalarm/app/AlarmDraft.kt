@@ -25,6 +25,14 @@ data class TaskDraft(
   }
 }
 
+/** A sound reference: `builtin:<id>`, a content/file URI, or an android.resource URI. */
+data class SoundRef(val uri: String, val name: String) {
+  fun json(): JSONObject = JSONObject().put("uri", uri).put("name", name)
+  companion object {
+    val BUILTIN = listOf(SoundRef("builtin:beacon", "Beacon"), SoundRef("builtin:pulse", "Pulse"), SoundRef("builtin:chime", "Chime"))
+  }
+}
+
 data class AlarmDraft(
   val id: String = UUID.randomUUID().toString(),
   val label: String = "Morning alarm",
@@ -59,6 +67,9 @@ data class AlarmDraft(
   val wakeRandomDelay: Boolean = false,
   val wakeDelayMinMinutes: Int = 3,
   val wakeDelayMaxMinutes: Int = 7,
+  val escalationEnabled: Boolean = false,
+  val escalationAfterMinutes: Int = 2,
+  val escalationTones: List<SoundRef> = SoundRef.BUILTIN,
 ) {
   fun json() = JSONObject().put("id", id).put("label", label).put("hour", hour).put("minute", minute)
     .put("days", JSONArray(days.sorted())).put("enabled", enabled).put("snoozeMinutes", snoozeMinutes)
@@ -71,6 +82,8 @@ data class AlarmDraft(
     .put("flashlightMode", flashlightMode)
     .put("allowSnooze", allowSnooze).put("snoozeLimit", snoozeLimit).put("harderAfterSnooze", harderAfterSnooze)
     .put("shuffleTasks", shuffleTasks).put("vibrate", vibrate).put("movingDismiss", movingDismiss)
+    .put("escalationEnabled", escalationEnabled).put("escalationAfterMinutes", escalationAfterMinutes)
+    .put("escalationTones", JSONArray(escalationTones.map { it.json() }))
     .put("wakeRandomDelay", wakeRandomDelay).put("wakeDelayMinMinutes", wakeDelayMinMinutes).put("wakeDelayMaxMinutes", wakeDelayMaxMinutes)
 
   fun validate() {
@@ -78,6 +91,10 @@ data class AlarmDraft(
     require(snoozeMinutes in 1..60) { "Choose a snooze length from 1 to 60 minutes." }
     require(flashlightMode in listOf("off", "steady", "flashing")) { "Choose a valid flashlight mode." }
     require(snoozeLimit in SNOOZE_LIMITS) { "Choose a valid snooze limit." }
+    if (escalationEnabled) {
+      require(escalationAfterMinutes in 1..120) { "Escalation must start after 1–120 minutes." }
+      require(escalationTones.size in 1..12) { "Add 1–12 sounds to the escalation playlist." }
+    }
     if (wakeEnabled) {
       require(wakeDelayMinutes in 1..1440 && wakeResponseMinutes in 1..1440) { "Wake-up check times must be 1–1440 minutes." }
       require(!wakeRandomDelay || (wakeDelayMinMinutes in 1..1440 && wakeDelayMaxMinutes in wakeDelayMinMinutes..1440)) { "Choose a random delay range from 1 to 1440 minutes." }
@@ -114,7 +131,11 @@ data class AlarmDraft(
         harderAfterSnooze = value.optBoolean("harderAfterSnooze"), shuffleTasks = value.optBoolean("shuffleTasks"),
         vibrate = value.optBoolean("vibrate"), movingDismiss = value.optBoolean("movingDismiss"),
         wakeRandomDelay = value.optBoolean("wakeRandomDelay"), wakeDelayMinMinutes = value.optInt("wakeDelayMinMinutes", 3),
-        wakeDelayMaxMinutes = value.optInt("wakeDelayMaxMinutes", 7))
+        wakeDelayMaxMinutes = value.optInt("wakeDelayMaxMinutes", 7),
+        escalationEnabled = value.optBoolean("escalationEnabled"), escalationAfterMinutes = value.optInt("escalationAfterMinutes", 2),
+        escalationTones = value.optJSONArray("escalationTones")?.let { array ->
+          (0 until array.length()).map { array.getJSONObject(it) }.map { SoundRef(it.getString("uri"), it.optString("name", "Sound")) }
+        } ?: SoundRef.BUILTIN)
     }
   }
 }

@@ -75,6 +75,7 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
     require(alarm.getInt("snoozeMinutes") in 1..60) { "Snooze must be 1–60 minutes" }
     require(alarm.optString("flashlightMode", "off") in listOf("off", "steady", "flashing")) { "Invalid flashlight mode" }
     require(alarm.optInt("snoozeLimit", 0) in listOf(0, 1, 2, 3, 5, 10)) { "Invalid snooze limit" }
+    Escalation.validate(alarm)
     require(alarm.getString("label").length <= 120) { "Alarm name is too long" }
     val days = alarm.getJSONArray("days")
     require((0 until days.length()).all { days.getInt(it) in 1..7 })
@@ -105,7 +106,7 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
 
   fun save(json: String) = synchronized(LOCK) {
     val alarm = JSONObject(json); validate(alarm)
-    alarm.remove("snoozed"); alarm.remove("wakeRetry"); alarm.remove("snoozeCount")
+    alarm.remove("snoozed"); alarm.remove("wakeRetry"); alarm.remove("snoozeCount"); alarm.remove("escalationLatched")
     require(store.sessions().none { it.getJSONObject("alarm").getString("id") == alarm.getString("id") }) { "Finish this alarm before editing it" }
     if (alarm.getBoolean("enabled")) {
       val access = readiness()
@@ -140,7 +141,7 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
     if (!alarm.getBoolean("enabled") || alarm.optLong("nextAt", Long.MAX_VALUE) > now() + 2000) return@synchronized
     wakeChecks.cancelForAlarm(id)
     // A regular occurrence starts with a fresh snooze count; snoozed rings and wake-up retries keep it.
-    if (!alarm.optBoolean("snoozed") && !alarm.optBoolean("wakeRetry")) alarm.put("snoozeCount", 0)
+    if (!alarm.optBoolean("snoozed") && !alarm.optBoolean("wakeRetry")) { alarm.put("snoozeCount", 0); alarm.remove("escalationLatched") }
     enqueue(alarm, false, alarm.optBoolean("wakeRetry"))
     // Arm the next occurrence before starting media: a failed service start must not end a repeating alarm.
     try {
@@ -161,6 +162,14 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
     if (alarm.optString("flashlightMode", "off") == "off") return
     check(access.getBoolean("flashlightAvailable")) { "This phone has no flashlight. Choose Off to enable this alarm." }
     check(access.getBoolean("cameraPermission")) { "Allow camera access for the flashlight, or choose Off." }
+  }
+  /** Rings a test of this draft with escalation already active, so the playlist starts immediately. */
+  fun testEscalation(json: String) = synchronized(LOCK) {
+    check(store.sessions().isEmpty()) { "An alarm is already ringing" }
+    val alarm = JSONObject(json); validate(alarm)
+    check(alarm.optBoolean("escalationEnabled")) { "Turn on escalation first" }
+    checkFlashlightAccess(alarm, readiness())
+    enqueue(alarm.put("escalationLatched", true), true); ring()
   }
   fun testWake(json: String) = synchronized(LOCK) {
     check(store.sessions().isEmpty()) { "Finish the ringing alarm first" }
@@ -210,6 +219,8 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
     require(action in listOf("dismiss", "snooze"))
     val sessions = store.sessions(); val session = current(sessions, sessionId)
     if (session.optString("action") == action) return@synchronized
+    // Tapping an action after the unanswered timeout still escalates first.
+    Escalation.refresh(session, Escalation.clock(context))
     if (action == "snooze") check(snoozesLeft(session.getJSONObject("alarm")) != 0) {
       if (!session.getJSONObject("alarm").optBoolean("allowSnooze", true)) "Snooze is turned off for this alarm" else "No snoozes left — complete the dismiss tasks"
     }

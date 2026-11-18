@@ -79,7 +79,7 @@ internal fun TaskAlarmApp(activity: MainActivity) {
         if (!correct) answerError = if (session.getString("kind") == "barcode") "That isn't your saved barcode. Try again." else "Not quite — try again."
       }
     }
-    fun prepareAndRun(test: Boolean, wake: Boolean = false) {
+    fun prepareAndRun(test: Boolean, wake: Boolean = false, escalation: Boolean = false) {
       val current = draft ?: return
       work {
         current.validate()
@@ -87,7 +87,8 @@ internal fun TaskAlarmApp(activity: MainActivity) {
           val sound = if (current.normalize && current.soundUri.isNotBlank()) SoundProcessor.prepare(activity, current.soundUri, true) else ""
           // Saving an alarm turns it on, like a bedside clock.
           val result = current.copy(playbackUri = sound, enabled = if (test) current.enabled else true)
-          if (wake) activity.engine.testWake(result.json().toString())
+          if (escalation) activity.engine.testEscalation(result.json().toString())
+          else if (wake) activity.engine.testWake(result.json().toString())
           else if (test) activity.engine.test(result.json().toString()) else activity.engine.save(result.json().toString())
           result
         }
@@ -111,12 +112,14 @@ internal fun TaskAlarmApp(activity: MainActivity) {
           onBack = { draftJson = null }, onSave = { prepareAndRun(false) }, onTest = { prepareAndRun(true) },
           onTestWake = { prepareAndRun(true, true) },
           onAccess = { kind -> try { activity.openAccess(kind) } catch (failure: Exception) { error = failure.message } },
-          onSound = { custom -> activity.chooseSound(custom, { uri, name ->
+          onSound = { custom, playlist -> activity.chooseSound(custom, { uri, name ->
             draftJson?.let { saved ->
               val current = AlarmDraft.from(JSONObject(saved))
-              if (current.id == draft.id) draftJson = current.copy(soundUri = uri, soundName = name, playbackUri = "").json().toString()
+              if (current.id == draft.id) draftJson = (if (playlist) current.copy(escalationTones = (current.escalationTones + SoundRef(uri, name)).take(12))
+                else current.copy(soundUri = uri, soundName = name, playbackUri = "")).json().toString()
             }
           }, { error = it }) },
+          onTestEscalation = { prepareAndRun(true, escalation = true) },
           onEnroll = { action, id -> if (!busy) scanAction = { value ->
             draftJson?.let { saved ->
               val current = AlarmDraft.from(JSONObject(saved))

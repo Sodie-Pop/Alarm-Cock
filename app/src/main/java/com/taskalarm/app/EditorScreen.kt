@@ -26,7 +26,8 @@ import org.json.JSONObject
 @Composable
 internal fun EditorScreen(alarm: AlarmDraft, isNew: Boolean, readiness: JSONObject?, busy: Boolean, now: Long,
   onChange: (AlarmDraft) -> Unit, onBack: () -> Unit, onSave: () -> Unit, onTest: () -> Unit, onTestWake: () -> Unit,
-  onAccess: (String) -> Unit, onSound: (Boolean) -> Unit, onEnroll: (String, String) -> Unit) {
+  onAccess: (String) -> Unit, onSound: (custom: Boolean, playlist: Boolean) -> Unit, onEnroll: (String, String) -> Unit,
+  onTestEscalation: () -> Unit = {}) {
   // "action|taskId" so the sheet survives a trip to the barcode scanner.
   var editing by rememberSaveable { mutableStateOf<String?>(null) }
   var adding by rememberSaveable { mutableStateOf<String?>(null) }
@@ -91,6 +92,9 @@ internal fun EditorScreen(alarm: AlarmDraft, isNew: Boolean, readiness: JSONObje
           R.drawable.ic_open_with) { value -> update { it.copy(movingDismiss = value) } }
       }
 
+      SectionHeader("Escalation")
+      SettingsCard { EscalationSettings(alarm, busy, ::update, { custom -> onSound(custom, true) }, onTestEscalation) }
+
       SectionHeader("Wake-up check")
       SettingsCard { WakeSettings(alarm, busy, ::update, { editing = it }, { adding = it }, onTestWake) }
       Spacer(Modifier.height(16.dp))
@@ -118,7 +122,8 @@ internal fun EditorScreen(alarm: AlarmDraft, isNew: Boolean, readiness: JSONObje
     }
   }
   if (soundSheet) ModalBottomSheet(onDismissRequest = { soundSheet = false }) {
-    SoundSheet(alarm, onPick = { custom -> soundSheet = false; onSound(custom) },
+    SoundSheet(alarm, onPick = { custom -> soundSheet = false; onSound(custom, false) },
+      onBuiltin = { sound -> soundSheet = false; update { it.copy(soundUri = sound.uri, soundName = sound.name, normalize = false, playbackUri = "") } },
       onDefault = { update { it.copy(soundUri = "", soundName = "Default phone alarm", normalize = false, playbackUri = "") } },
       onNormalize = { value -> update { it.copy(normalize = value) } })
   }
@@ -254,6 +259,52 @@ private fun WakeSettings(alarm: AlarmDraft, busy: Boolean, update: ((AlarmDraft)
   }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun EscalationSettings(alarm: AlarmDraft, busy: Boolean, update: ((AlarmDraft) -> AlarmDraft) -> Unit,
+  onAddSound: (custom: Boolean) -> Unit, onTest: () -> Unit) {
+  SwitchRow("Get louder if I don't respond", "Full volume, and a new sound every 45 seconds until you act.", alarm.escalationEnabled, !busy,
+    R.drawable.ic_campaign) { value -> update { it.copy(escalationEnabled = value) } }
+  if (!alarm.escalationEnabled) return
+  HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
+  val after = alarm.escalationAfterMinutes
+  Stepper("Start after", after, minutesText(after), after > 1, after < 120,
+    { update { it.copy(escalationAfterMinutes = nextMinutes(after, false)) } },
+    { update { it.copy(escalationAfterMinutes = nextMinutes(after, true).coerceAtMost(120)) } })
+  Text("Without choosing Dismiss or Snooze. Starts right away from the third ring after two snoozes.",
+    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
+  Text("Playlist", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp))
+  val tones = alarm.escalationTones
+  fun set(list: List<SoundRef>) = update { it.copy(escalationTones = list) }
+  tones.forEachIndexed { index, sound ->
+    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+      Text("${index + 1}.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(28.dp))
+      Text(sound.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1)
+      IconButton(onClick = { set(tones.toMutableList().apply { add(index - 1, removeAt(index)) }) }, enabled = !busy && index > 0) {
+        Ico(R.drawable.ic_arrow_upward, "Move ${sound.name} up", size = 20.dp)
+      }
+      IconButton(onClick = { set(tones.toMutableList().apply { add(index + 1, removeAt(index)) }) }, enabled = !busy && index < tones.lastIndex) {
+        Ico(R.drawable.ic_arrow_downward, "Move ${sound.name} down", size = 20.dp)
+      }
+      IconButton(onClick = { set(tones.filterIndexed { i, _ -> i != index }) }, enabled = !busy && tones.size > 1) {
+        Ico(R.drawable.ic_close, "Remove ${sound.name}", size = 20.dp)
+      }
+    }
+  }
+  Text("Each sound plays for 45 seconds, then the next; the list repeats.", style = MaterialTheme.typography.bodySmall,
+    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+  if (tones.size < 12) FlowRow(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    SoundRef.BUILTIN.forEach { sound -> AssistChip({ set(tones + sound) }, label = { Text(sound.name) }, enabled = !busy,
+      leadingIcon = { Ico(R.drawable.ic_add, size = 18.dp) }) }
+    AssistChip({ onAddSound(false) }, label = { Text("Phone sound") }, enabled = !busy, leadingIcon = { Ico(R.drawable.ic_add, size = 18.dp) })
+    AssistChip({ onAddSound(true) }, label = { Text("Audio file") }, enabled = !busy, leadingIcon = { Ico(R.drawable.ic_add, size = 18.dp) })
+  }
+  Row(Modifier.padding(horizontal = 8.dp)) {
+    TextButton(onClick = onTest, enabled = !busy) { Ico(R.drawable.ic_play_arrow, size = 20.dp); Spacer(Modifier.width(8.dp)); Text("Test escalation") }
+    if (tones != SoundRef.BUILTIN) TextButton(onClick = { set(SoundRef.BUILTIN) }, enabled = !busy) { Text("Reset playlist") }
+  }
+}
+
 @Composable
 private fun EditorActions(busy: Boolean, onTest: () -> Unit, onSave: () -> Unit) {
   Surface(color = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 3.dp) {
@@ -347,17 +398,25 @@ internal fun AddTaskSheet(onPick: (String) -> Unit) {
 }
 
 @Composable
-internal fun SoundSheet(alarm: AlarmDraft, onPick: (Boolean) -> Unit, onDefault: () -> Unit, onNormalize: (Boolean) -> Unit) {
+internal fun SoundSheet(alarm: AlarmDraft, onPick: (Boolean) -> Unit, onDefault: () -> Unit, onNormalize: (Boolean) -> Unit,
+  onBuiltin: (SoundRef) -> Unit = {}) {
   Column(Modifier.fillMaxWidth().padding(bottom = 16.dp).navigationBarsPadding()) {
     Column(Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
       Text("Alarm sound", style = MaterialTheme.typography.titleLarge)
       Text(alarm.soundName, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
     }
     Spacer(Modifier.height(8.dp))
+    Text("Built in", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+      modifier = Modifier.padding(start = 24.dp, top = 4.dp))
+    @OptIn(ExperimentalLayoutApi::class)
+    FlowRow(Modifier.padding(horizontal = 24.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      SoundRef.BUILTIN.forEach { sound -> FilterChip(alarm.soundUri == sound.uri, { onBuiltin(sound) }, label = { Text(sound.name) },
+        leadingIcon = { Ico(R.drawable.ic_music_note, size = 18.dp) }) }
+    }
     NavRow("Phone alarm sounds", "Pick from the sounds on your phone", R.drawable.ic_alarm_clock) { onPick(false) }
     NavRow("Import an audio file", "MP3, M4A, WAV, Ogg… copied into the app", R.drawable.ic_music_note) { onPick(true) }
-    if (alarm.soundUri.isNotEmpty()) {
-      NavRow("Use the phone's default", null, R.drawable.ic_close, trailing = {}, onClick = onDefault)
+    if (alarm.soundUri.isNotEmpty()) NavRow("Use the phone's default", null, R.drawable.ic_close, trailing = {}, onClick = onDefault)
+    if (alarm.soundUri.isNotEmpty() && !alarm.soundUri.startsWith("builtin:")) {
       SwitchRow("Boost quiet sounds", "Raises the file's peak level without clipping. Up to 5 minutes of audio.", alarm.normalize,
         icon = R.drawable.ic_volume_up, onChange = onNormalize)
     }

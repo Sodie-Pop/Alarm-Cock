@@ -79,7 +79,7 @@ class ScreenshotTest {
       capture("home-empty", dark) { HomeScreen(homeState(emptyList()), false, SnackbarHostState(), now, {}, {}, { _, _ -> }, {}, {}, {}) }
       capture("editor", dark) {
         EditorScreen(morning, false, JSONObject().put("flashlightAvailable", true).put("cameraPermission", true), false, now,
-          {}, {}, {}, {}, {}, {}, {}, { _, _ -> })
+          {}, {}, {}, {}, {}, {}, { _, _ -> }, { _, _ -> })
       }
       capture("sheet-task", dark) {
         Box(Modifier.padding(top = 24.dp)) { TaskSheet(morning.dismissTasks[0], {}, {}, {}, {}) }
@@ -110,7 +110,7 @@ class ScreenshotTest {
     val wakeTasks = JSONObject(wake.toString()).put("alarm", morning.copy(wakeMode = "tasks", wakeTasks = listOf(TaskDraft(kind = "text", difficulty = "medium"))).json())
       .put("taskIndex", 0).put("round", 1).put("kind", "text").put("prompt", "K7mP3xRa9q").put("challengeId", "c2")
     capture("wake-tasks", true) { WakeCheckScreen(wakeTasks, false, null, now, {}, {}, {}, {}) }
-    val limited = JSONObject(ringing.toString()).put("alarm", morning.copy(snoozeLimit = 3, vibrate = true).json().put("snoozeCount", 1))
+    val limited = JSONObject(ringing.toString()).put("alarm", morning.copy(snoozeLimit = 3, vibrate = true).json().put("snoozeCount", 1)).put("escalated", true).put("escalationToneName", "Pulse")
     capture("ringing-limit", true) { RingingScreen(limited, false, null, now, {}, {}, {}, {}, {}) }
     val moving = JSONObject(ringing.toString()).put("alarm", morning.copy(movingDismiss = true).json())
     capture("ringing-moving", true, frozen = true) { RingingScreen(moving, false, null, now, {}, {}, {}, {}, {}) }
@@ -120,10 +120,10 @@ class ScreenshotTest {
   fun fullEditor() {
     start()
     val full = morning.copy(snoozeTasks = emptyList(), wakeMode = "tasks", wakeReuseDismissTasks = false, protectVolume = true,
-      snoozeLimit = 3, harderAfterSnooze = true, vibrate = true, shuffleTasks = true, wakeRandomDelay = true)
+      snoozeLimit = 3, harderAfterSnooze = true, vibrate = true, shuffleTasks = true, wakeRandomDelay = true, escalationEnabled = true)
     for (dark in listOf(true, false)) capture("editor-full", dark) {
       EditorScreen(full, false, JSONObject().put("flashlightAvailable", true).put("cameraPermission", false), false, now,
-        {}, {}, {}, {}, {}, {}, {}, { _, _ -> })
+        {}, {}, {}, {}, {}, {}, { _, _ -> }, { _, _ -> })
     }
   }
 }

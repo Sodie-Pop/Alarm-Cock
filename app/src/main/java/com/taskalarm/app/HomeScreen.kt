@@ -144,6 +144,7 @@ private fun AlarmCard(alarm: AlarmDraft, busy: Boolean, is24: Boolean, onEdit: (
         else InfoPill(R.drawable.ic_snooze, "${alarm.snoozeMinutes} min" + (if (alarm.snoozeLimit > 0) " ×${alarm.snoozeLimit}" else "") +
           if (alarm.snoozeTasks.isNotEmpty()) " · ${alarm.snoozeTasks.size} task${if (alarm.snoozeTasks.size > 1) "s" else ""}" else "")
         if (alarm.vibrate) InfoPill(R.drawable.ic_vibration, "Vibrate")
+        if (alarm.escalationEnabled) InfoPill(R.drawable.ic_campaign, "Escalates")
         if (alarm.wakeEnabled) InfoPill(R.drawable.ic_wb_sunny, "Wake check")
         if (alarm.flashlightMode != "off") InfoPill(R.drawable.ic_flashlight_on, if (alarm.flashlightMode == "flashing") "Flashing" else "Light")
       }

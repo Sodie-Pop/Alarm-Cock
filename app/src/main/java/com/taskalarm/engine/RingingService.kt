@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.*
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import org.json.JSONObject
 
 class RingingService : Service() {
   private var player: MediaPlayer? = null
@@ -21,6 +22,9 @@ class RingingService : Service() {
   private var scannerActive = false
   private var flashlightWakeLock: PowerManager.WakeLock? = null
   private var vibrating = false
+  private var toneSlot = -1L
+  private var escalationVolumeApplied = false
+  private val escalationPulse = Runnable { escalationTick() }
   internal val ringingWakeLock by lazy {
     getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "TaskAlarm:ringing")
       .apply { setReferenceCounted(false) }
@@ -109,12 +113,12 @@ class RingingService : Service() {
       focus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT).setAudioAttributes(attributes)
         .setOnAudioFocusChangeListener { }.build().also { audio.requestAudioFocus(it) }
       val sound = if (alarm.optBoolean("normalize")) alarm.optString("playbackUri", alarm.optString("soundUri")) else alarm.optString("soundUri")
-      val chosen = sound.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
-      if (!play(chosen ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM))) {
-        if (!play(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM))) {
-          tone = ToneGenerator(AudioManager.STREAM_ALARM, 100); handler.post(fallbackBeep)
-        }
+      val chosen = sound.takeIf { it.isNotBlank() }?.let { BuiltinSounds.resolve(this, it) }
+      if (alarm.optBoolean("escalationEnabled")) {
+        stampRingStart()
+        escalationTick() // An escalated or latched ring goes straight to the playlist.
       }
+      if (toneSlot < 0) playWithFallback(chosen)
     }
     val flashlightMode = alarm.optString("flashlightMode", "off")
     if (flashlightMode != "off" && !scannerActive) {
@@ -128,6 +132,57 @@ class RingingService : Service() {
     player?.setVolume(if (muted) 0f else 1f, if (muted) 0f else 1f)
     if (muted) tone?.stopTone()
     return START_STICKY
+  }
+
+  /** Chosen sound → phone default → built-in Beacon (readable before first unlock) → beep. */
+  private fun playWithFallback(uri: Uri?) {
+    val default = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+    if (play(uri ?: default) || play(default) || play(BuiltinSounds.resolve(this, BuiltinSounds.uri("beacon")))) return
+    tone = ToneGenerator(AudioManager.STREAM_ALARM, 100); handler.post(fallbackBeep)
+  }
+
+  private fun stopSound() {
+    handler.removeCallbacks(fallbackBeep); tone?.release(); tone = null
+    player?.release(); player = null
+  }
+
+  /** Runs [change] on the persisted front session if it is still this service's session. */
+  private fun updateSession(change: (JSONObject) -> Boolean): JSONObject? = synchronized(AlarmEngine.LOCK) {
+    val store = AlarmStore(this); val sessions = store.sessions()
+    val first = sessions.firstOrNull()?.takeIf { it.getString("sessionId") == sessionId } ?: return null
+    if (change(first)) store.sessions(sessions)
+    first
+  }
+
+  /** The unanswered timer starts when this alarm reaches the front, not when it was queued. */
+  private fun stampRingStart() = updateSession { session ->
+    if (session.has("ringStartedWall")) false else { Escalation.stamp(session, "ringStarted", Escalation.clock(this)); true }
+  }
+
+  private fun escalationTick() {
+    handler.removeCallbacks(escalationPulse)
+    val clock = Escalation.clock(this)
+    val session = updateSession { Escalation.refresh(it, clock) } ?: return
+    val alarm = session.getJSONObject("alarm")
+    if (!alarm.optBoolean("escalationEnabled")) return
+    if (!session.optBoolean("escalated")) { handler.postDelayed(escalationPulse, 1000); return }
+    if (!escalationVolumeApplied) {
+      // Hold the alarm stream at maximum, whether or not protect-volume is on; the original level returns afterwards.
+      escalationVolumeApplied = true
+      val audio = getSystemService(AudioManager::class.java)
+      restoreVolume = restoreVolume ?: session.optInt("originalVolume", audio.getStreamVolume(AudioManager.STREAM_ALARM))
+      guardedVolume = audio.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+      if (!guardRunning) { guardRunning = true; handler.post(volumeGuard) }
+    }
+    val slot = Escalation.slot(session, clock)
+    if (slot != toneSlot) {
+      toneSlot = slot
+      val tones = Escalation.tones(alarm)
+      val (uri, name) = tones[(slot % tones.size).toInt()]
+      stopSound(); playWithFallback(BuiltinSounds.resolve(this, uri))
+      updateSession { if (it.optString("escalationToneName") == name) false else { it.put("escalationToneName", name); true } }
+    }
+    handler.postDelayed(escalationPulse, minOf(1000L, Escalation.untilNextTone(session, clock)))
   }
 
   private fun play(uri: Uri): Boolean = try {
@@ -164,6 +219,7 @@ class RingingService : Service() {
 
   private fun releaseAudio() {
     stopVibration()
+    handler.removeCallbacks(escalationPulse); toneSlot = -1; escalationVolumeApplied = false
     handler.removeCallbacks(volumeGuard); guardRunning = false
     handler.removeCallbacks(fallbackBeep); tone?.release(); tone = null
     player?.release(); player = null
@@ -201,6 +257,6 @@ class RingingService : Service() {
     const val HEARTBEAT_MS = 30_000L
     const val WAKE_LOCK_MS = 10 * 60_000L
     const val TASK_REMOVED_BACKSTOP_MS = 5_000L
-    val VIBRATION_PATTERN = longArrayOf(0, 800, 600)
+    val VIBRATION_PATTERN = longArrayOf(0, 350, 450, 350, 1200)
   }
 }

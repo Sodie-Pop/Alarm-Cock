@@ -50,6 +50,8 @@ internal fun RingingScreen(active: JSONObject, busy: Boolean, answerError: Strin
       }
       val notices = @Composable {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+          if (active.optBoolean("escalated")) Notice("Escalated · full volume" + active.optString("escalationToneName").let { if (it.isEmpty()) "" else " · $it" },
+            R.drawable.ic_campaign, MaterialTheme.colorScheme.primary)
           if (active.optBoolean("volumeGuardBlocked")) Notice("Android blocked the volume guard. Check your alarm volume.")
           if (active.optBoolean("flashlightBlocked")) Notice("Flashlight unavailable — another app may be using the camera. Your alarm continues.")
           if (test) Notice("To stop a test, finish its tasks.", R.drawable.ic_play_arrow, MaterialTheme.colorScheme.onSurfaceVariant)
