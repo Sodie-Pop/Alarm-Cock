@@ -70,3 +70,8 @@ yourself. If it's missing, Gradle prints `WARNING: signing/task-alarm-debug.keys
 the APK falls back to a throwaway key that will not install over their app. Never hand over an APK signed
 with the fallback key. Tests and lint don't need it. Bump `versionCode`/`versionName` in `app/build.gradle.kts` for
 user-facing releases.
+
+To publish a GitHub release: bump `versionName`/`versionCode`, commit, then push a tag `v<versionName>` (e.g.
+`git tag v0.5.1 && git push origin v0.5.1`). `.github/workflows/release.yml` builds, runs the unit tests, verifies the
+APK carries the dedicated key's certificate, and attaches `task-alarm-<version>.apk` to the release. It needs the
+`KEYSTORE_BASE64` repository secret (base64 of the keystore) and refuses to publish if the tag and version differ.
