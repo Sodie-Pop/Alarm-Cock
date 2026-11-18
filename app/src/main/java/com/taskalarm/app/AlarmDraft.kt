@@ -48,7 +48,17 @@ data class AlarmDraft(
   val wakeTasks: List<TaskDraft> = listOf(TaskDraft()),
   val wakeReuseDismissTasks: Boolean = true,
   val wakeRetryTasks: List<TaskDraft> = listOf(TaskDraft()),
-  val flashlightMode: String = "off"
+  val flashlightMode: String = "off",
+  val allowSnooze: Boolean = true,
+  /** 0 = unlimited. */
+  val snoozeLimit: Int = 0,
+  val harderAfterSnooze: Boolean = false,
+  val shuffleTasks: Boolean = false,
+  val vibrate: Boolean = false,
+  val movingDismiss: Boolean = false,
+  val wakeRandomDelay: Boolean = false,
+  val wakeDelayMinMinutes: Int = 3,
+  val wakeDelayMaxMinutes: Int = 7,
 ) {
   fun json() = JSONObject().put("id", id).put("label", label).put("hour", hour).put("minute", minute)
     .put("days", JSONArray(days.sorted())).put("enabled", enabled).put("snoozeMinutes", snoozeMinutes)
@@ -59,17 +69,22 @@ data class AlarmDraft(
     .put("wakeMode", wakeMode).put("wakeTasks", JSONArray(wakeTasks.map { it.json() }))
     .put("wakeReuseDismissTasks", wakeReuseDismissTasks).put("wakeRetryTasks", JSONArray(wakeRetryTasks.map { it.json() }))
     .put("flashlightMode", flashlightMode)
+    .put("allowSnooze", allowSnooze).put("snoozeLimit", snoozeLimit).put("harderAfterSnooze", harderAfterSnooze)
+    .put("shuffleTasks", shuffleTasks).put("vibrate", vibrate).put("movingDismiss", movingDismiss)
+    .put("wakeRandomDelay", wakeRandomDelay).put("wakeDelayMinMinutes", wakeDelayMinMinutes).put("wakeDelayMaxMinutes", wakeDelayMaxMinutes)
 
   fun validate() {
     require(hour.toIntOrNull() in 0..23 && minute.toIntOrNull() in 0..59) { "Enter a valid 24-hour time." }
     require(snoozeMinutes in 1..60) { "Choose a snooze length from 1 to 60 minutes." }
     require(flashlightMode in listOf("off", "steady", "flashing")) { "Choose a valid flashlight mode." }
+    require(snoozeLimit in SNOOZE_LIMITS) { "Choose a valid snooze limit." }
     if (wakeEnabled) {
       require(wakeDelayMinutes in 1..1440 && wakeResponseMinutes in 1..1440) { "Wake-up check times must be 1–1440 minutes." }
+      require(!wakeRandomDelay || (wakeDelayMinMinutes in 1..1440 && wakeDelayMaxMinutes in wakeDelayMinMinutes..1440)) { "Choose a random delay range from 1 to 1440 minutes." }
       require(wakeMode in listOf("yes_no", "tasks"))
       require(wakeMode != "tasks" || wakeTasks.isNotEmpty()) { "Choose at least one task to confirm you’re awake." }
     }
-    val configured = dismissTasks + snoozeTasks + if (wakeEnabled) (if (wakeMode == "tasks") wakeTasks else emptyList()) + (if (!wakeReuseDismissTasks) wakeRetryTasks else emptyList()) else emptyList()
+    val configured = dismissTasks + (if (allowSnooze) snoozeTasks else emptyList()) + if (wakeEnabled) (if (wakeMode == "tasks") wakeTasks else emptyList()) + (if (!wakeReuseDismissTasks) wakeRetryTasks else emptyList()) else emptyList()
     for (task in configured) {
       require(task.kind != "barcode" || task.barcodeMode != "specific" || task.barcode.isNotEmpty()) { "Scan the target barcode for each specific-barcode task." }
     }
@@ -80,6 +95,7 @@ data class AlarmDraft(
     "wake" -> copy(wakeTasks = tasks); "retry" -> copy(wakeRetryTasks = tasks); else -> error("Unknown task list")
   }
   companion object {
+    val SNOOZE_LIMITS = listOf(0, 1, 2, 3, 5, 10)
     fun from(value: JSONObject): AlarmDraft {
       fun tasks(key: String, fallback: List<TaskDraft> = emptyList()): List<TaskDraft> {
         val array = value.optJSONArray(key) ?: return fallback
@@ -93,7 +109,12 @@ data class AlarmDraft(
         value.optBoolean("protectVolume"), value.optBoolean("allowMuteWhileSolving"), value.optBoolean("wakeEnabled"),
         value.optInt("wakeDelayMinutes", 5), value.optInt("wakeResponseMinutes", 5), value.optString("wakeMode", "yes_no"),
         tasks("wakeTasks", listOf(TaskDraft())), value.optBoolean("wakeReuseDismissTasks", true), tasks("wakeRetryTasks", listOf(TaskDraft())),
-        value.optString("flashlightMode", "off"))
+        value.optString("flashlightMode", "off"),
+        allowSnooze = value.optBoolean("allowSnooze", true), snoozeLimit = value.optInt("snoozeLimit", 0),
+        harderAfterSnooze = value.optBoolean("harderAfterSnooze"), shuffleTasks = value.optBoolean("shuffleTasks"),
+        vibrate = value.optBoolean("vibrate"), movingDismiss = value.optBoolean("movingDismiss"),
+        wakeRandomDelay = value.optBoolean("wakeRandomDelay"), wakeDelayMinMinutes = value.optInt("wakeDelayMinMinutes", 3),
+        wakeDelayMaxMinutes = value.optInt("wakeDelayMaxMinutes", 7))
     }
   }
 }

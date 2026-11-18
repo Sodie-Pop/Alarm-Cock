@@ -74,11 +74,14 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
     require(alarm.getInt("hour") in 0..23 && alarm.getInt("minute") in 0..59) { "Invalid time" }
     require(alarm.getInt("snoozeMinutes") in 1..60) { "Snooze must be 1–60 minutes" }
     require(alarm.optString("flashlightMode", "off") in listOf("off", "steady", "flashing")) { "Invalid flashlight mode" }
+    require(alarm.optInt("snoozeLimit", 0) in listOf(0, 1, 2, 3, 5, 10)) { "Invalid snooze limit" }
     require(alarm.getString("label").length <= 120) { "Alarm name is too long" }
     val days = alarm.getJSONArray("days")
     require((0 until days.length()).all { days.getInt(it) in 1..7 })
     if (alarm.optBoolean("wakeEnabled")) {
       require(alarm.optInt("wakeDelayMinutes", 5) in 1..1440 && alarm.optInt("wakeResponseMinutes", 5) in 1..1440) { "Wake-up check times must be 1–1440 minutes" }
+      require(!alarm.optBoolean("wakeRandomDelay") || (alarm.optInt("wakeDelayMinMinutes", 3) in 1..1440 &&
+        alarm.optInt("wakeDelayMaxMinutes", 7) in alarm.optInt("wakeDelayMinMinutes", 3)..1440)) { "Invalid random wake-up check delay" }
       require(alarm.optString("wakeMode", "yes_no") in listOf("yes_no", "tasks"))
       require(alarm.optString("wakeMode", "yes_no") != "tasks" || (alarm.optJSONArray("wakeTasks")?.length() ?: 0) > 0) { "Choose at least one wake-up confirmation task" }
     }
@@ -92,7 +95,7 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
         require(task.getInt("rounds") in 1..10)
         if (task.getString("kind") == "barcode") {
           require(task.getString("barcodeMode") in listOf("any", "specific"))
-          val used = key in listOf("dismissTasks", "snoozeTasks") || (alarm.optBoolean("wakeEnabled") &&
+          val used = key == "dismissTasks" || (key == "snoozeTasks" && alarm.optBoolean("allowSnooze", true)) || (alarm.optBoolean("wakeEnabled") &&
             ((key == "wakeTasks" && alarm.optString("wakeMode", "yes_no") == "tasks") || (key == "wakeRetryTasks" && !alarm.optBoolean("wakeReuseDismissTasks", true))))
           require(!used || task.getString("barcodeMode") != "specific" || task.getString("barcode").isNotEmpty()) { "Scan the target barcode first" }
         }
@@ -102,7 +105,7 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
 
   fun save(json: String) = synchronized(LOCK) {
     val alarm = JSONObject(json); validate(alarm)
-    alarm.remove("snoozed"); alarm.remove("wakeRetry")
+    alarm.remove("snoozed"); alarm.remove("wakeRetry"); alarm.remove("snoozeCount")
     require(store.sessions().none { it.getJSONObject("alarm").getString("id") == alarm.getString("id") }) { "Finish this alarm before editing it" }
     if (alarm.getBoolean("enabled")) {
       val access = readiness()
@@ -136,6 +139,8 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
     val alarm = store.find(id) ?: return@synchronized
     if (!alarm.getBoolean("enabled") || alarm.optLong("nextAt", Long.MAX_VALUE) > now() + 2000) return@synchronized
     wakeChecks.cancelForAlarm(id)
+    // A regular occurrence starts with a fresh snooze count; snoozed rings and wake-up retries keep it.
+    if (!alarm.optBoolean("snoozed") && !alarm.optBoolean("wakeRetry")) alarm.put("snoozeCount", 0)
     enqueue(alarm, false, alarm.optBoolean("wakeRetry"))
     // Arm the next occurrence before starting media: a failed service start must not end a repeating alarm.
     try {
@@ -169,6 +174,10 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
     if (wakeRetry && !base.optBoolean("wakeReuseDismissTasks", true)) {
       alarm.put("dismissTasks", base.optJSONArray("wakeRetryTasks") ?: JSONArray())
     }
+    if (base.optBoolean("harderAfterSnooze")) {
+      val steps = base.optInt("snoozeCount", 0)
+      for (key in listOf("dismissTasks", "snoozeTasks")) alarm.put(key, TaskOrder.harder(alarm.optJSONArray(key) ?: JSONArray(), steps))
+    }
     val sessions = store.sessions()
     if (sessions.none { it.getJSONObject("alarm").getString("id") == alarm.getString("id") && it.getBoolean("test") == test }) {
       val audio = context.getSystemService(AudioManager::class.java)
@@ -201,7 +210,13 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
     require(action in listOf("dismiss", "snooze"))
     val sessions = store.sessions(); val session = current(sessions, sessionId)
     if (session.optString("action") == action) return@synchronized
+    if (action == "snooze") check(snoozesLeft(session.getJSONObject("alarm")) != 0) {
+      if (!session.getJSONObject("alarm").optBoolean("allowSnooze", true)) "Snooze is turned off for this alarm" else "No snoozes left — complete the dismiss tasks"
+    }
     session.put("action", action).put("muted", false)
+    val alarm = session.getJSONObject("alarm")
+    val key = if (action == "snooze") "snoozeTasks" else "dismissTasks"
+    if (alarm.optBoolean("shuffleTasks")) alarm.put(key, TaskOrder.shuffled(alarm.optJSONArray(key) ?: JSONArray()))
     val tasks = tasks(session)
     if (tasks.length() == 0) finish(sessions)
     else { SessionTasks.start(session, tasks); store.sessions(sessions); ring() }
@@ -237,6 +252,7 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
       if (session.getString("action") == "snooze") {
         check(readiness().getBoolean("exactAlarms")) { "Restore Alarms & reminders access before snoozing" }
         base.put("enabled", true).put("snoozed", true).put("wakeRetry", session.optBoolean("wakeRetry"))
+          .put("snoozeCount", session.getJSONObject("alarm").optInt("snoozeCount", 0) + 1)
           .put("nextAt", now() + base.getInt("snoozeMinutes") * 60_000L)
         schedule(base); store.put(base)
       } else wakeChecks.schedule(base)
@@ -296,6 +312,12 @@ internal class AlarmEngine(private val context: Context, private val now: () -> 
 
   companion object {
     val LOCK = Any()
+    /** Snoozes still allowed for this occurrence: -1 = unlimited, 0 = none (snooze off or limit reached). */
+    fun snoozesLeft(alarm: JSONObject): Int {
+      if (!alarm.optBoolean("allowSnooze", true)) return 0
+      val limit = alarm.optInt("snoozeLimit", 0)
+      return if (limit == 0) -1 else (limit - alarm.optInt("snoozeCount", 0)).coerceAtLeast(0)
+    }
     /**
      * Explicit app launch intent. getLaunchIntentForPackage hides non-direct-boot-aware activities before the
      * first unlock, which would break scheduling and ringing notifications on a locked phone after reboot.

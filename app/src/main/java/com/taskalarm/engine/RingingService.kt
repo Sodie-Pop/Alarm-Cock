@@ -20,6 +20,7 @@ class RingingService : Service() {
   private var restoreVolume: Int? = null
   private var scannerActive = false
   private var flashlightWakeLock: PowerManager.WakeLock? = null
+  private var vibrating = false
   internal val ringingWakeLock by lazy {
     getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "TaskAlarm:ringing")
       .apply { setReferenceCounted(false) }
@@ -104,6 +105,7 @@ class RingingService : Service() {
         guardedVolume = session.optInt("guardVolume", VolumePolicy.guardedLevel(restoreVolume!!, audio.getStreamMaxVolume(AudioManager.STREAM_ALARM)))
         guardRunning = true; handler.post(volumeGuard)
       }
+      if (alarm.optBoolean("vibrate")) startVibration()
       focus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT).setAudioAttributes(attributes)
         .setOnAudioFocusChangeListener { }.build().also { audio.requestAudioFocus(it) }
       val sound = if (alarm.optBoolean("normalize")) alarm.optString("playbackUri", alarm.optString("soundUri")) else alarm.optString("soundUri")
@@ -143,7 +145,25 @@ class RingingService : Service() {
     candidate.prepare(); candidate.start(); true
   } catch (_: Exception) { player?.release(); player = null; false }
 
+  /** Repeating pattern on the alarm usage; muting sound leaves it running. */
+  private fun startVibration() {
+    val vibrator = if (Build.VERSION.SDK_INT >= 31) getSystemService(VibratorManager::class.java).defaultVibrator
+      else @Suppress("DEPRECATION") getSystemService(Vibrator::class.java)
+    if (!vibrator.hasVibrator()) return
+    val effect = VibrationEffect.createWaveform(VIBRATION_PATTERN, 0)
+    if (Build.VERSION.SDK_INT >= 33) vibrator.vibrate(effect, VibrationAttributes.createForUsage(VibrationAttributes.USAGE_ALARM))
+    else @Suppress("DEPRECATION") vibrator.vibrate(effect, attributes)
+    vibrating = true
+  }
+  private fun stopVibration() {
+    if (!vibrating) return
+    val vibrator = if (Build.VERSION.SDK_INT >= 31) getSystemService(VibratorManager::class.java).defaultVibrator
+      else @Suppress("DEPRECATION") getSystemService(Vibrator::class.java)
+    vibrator.cancel(); vibrating = false
+  }
+
   private fun releaseAudio() {
+    stopVibration()
     handler.removeCallbacks(volumeGuard); guardRunning = false
     handler.removeCallbacks(fallbackBeep); tone?.release(); tone = null
     player?.release(); player = null
@@ -181,5 +201,6 @@ class RingingService : Service() {
     const val HEARTBEAT_MS = 30_000L
     const val WAKE_LOCK_MS = 10 * 60_000L
     const val TASK_REMOVED_BACKSTOP_MS = 5_000L
+    val VIBRATION_PATTERN = longArrayOf(0, 800, 600)
   }
 }

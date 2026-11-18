@@ -55,28 +55,40 @@ internal fun EditorScreen(alarm: AlarmDraft, isNew: Boolean, readiness: JSONObje
       SectionHeader("To turn it off", "Finish these, in order, to dismiss the alarm.")
       SettingsCard {
         TaskRows(alarm.dismissTasks, "No tasks — one tap turns the alarm off.", busy, { editing = "dismiss|$it" }, { adding = "dismiss" })
+        HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
+        SwitchRow("Shuffle task order", "Mixes up the order each time. Every task still counts.", alarm.shuffleTasks, !busy,
+          R.drawable.ic_shuffle) { value -> update { it.copy(shuffleTasks = value) } }
       }
 
       SectionHeader("To snooze", "Snoozing restarts the alarm later; it never skips the turn-off tasks.")
       SettingsCard {
-        Text("Snooze for", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
-        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          listOf(1, 5, 10, 15, 30, 60).forEach { minutes ->
-            FilterChip(alarm.snoozeMinutes == minutes, { update { it.copy(snoozeMinutes = minutes) } }, label = { Text(minutesText(minutes)) })
+        SwitchRow("Allow snooze", if (alarm.allowSnooze) null else "The ringing screen won't offer Snooze.", alarm.allowSnooze, !busy,
+          R.drawable.ic_snooze) { value -> update { it.copy(allowSnooze = value) } }
+        if (alarm.allowSnooze) {
+          ChipChoice("Snooze for", listOf(1, 5, 10, 15, 30, 60), alarm.snoozeMinutes, ::minutesText, !busy) { minutes -> update { it.copy(snoozeMinutes = minutes) } }
+          ChipChoice("Snooze limit", AlarmDraft.SNOOZE_LIMITS, alarm.snoozeLimit, { if (it == 0) "Unlimited" else "$it" }, !busy) { limit ->
+            update { it.copy(snoozeLimit = limit) }
           }
+          SwitchRow("Harder after each snooze", "Raises task difficulty one level per snooze, up to Hard.", alarm.harderAfterSnooze, !busy) { value ->
+            update { it.copy(harderAfterSnooze = value) }
+          }
+          HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
+          TaskRows(alarm.snoozeTasks, "No tasks — one tap snoozes.", busy, { editing = "snooze|$it" }, { adding = "snooze" })
         }
-        HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
-        TaskRows(alarm.snoozeTasks, "No tasks — one tap snoozes.", busy, { editing = "snooze|$it" }, { adding = "snooze" })
       }
 
       SectionHeader("Sound & alerts")
       SettingsCard {
         NavRow("Sound", alarm.soundName + if (alarm.normalize && alarm.soundUri.isNotEmpty()) " · boosted" else "", R.drawable.ic_music_note, !busy) { soundSheet = true }
+        SwitchRow("Vibrate", "Keeps vibrating while it rings, even when muted.", alarm.vibrate, !busy,
+          R.drawable.ic_vibration) { value -> update { it.copy(vibrate = value) } }
         FlashlightRow(alarm, readiness, busy, onAccess) { mode -> update { it.copy(flashlightMode = mode) } }
         SwitchRow("Protect alarm volume", "Stops the volume being turned down while it rings.", alarm.protectVolume, !busy,
           R.drawable.ic_volume_up) { value -> update { it.copy(protectVolume = value) } }
         SwitchRow("Mute while solving", "Shows a mute button during tasks. Leaving the app unmutes.", alarm.allowMuteWhileSolving, !busy,
           R.drawable.ic_volume_off) { value -> update { it.copy(allowMuteWhileSolving = value) } }
+        SwitchRow("Moving Dismiss button", "Dismiss jumps somewhere new every 5 seconds; Snooze shrinks into the corner.", alarm.movingDismiss, !busy,
+          R.drawable.ic_open_with) { value -> update { it.copy(movingDismiss = value) } }
       }
 
       SectionHeader("Wake-up check")
@@ -206,7 +218,18 @@ private fun WakeSettings(alarm: AlarmDraft, busy: Boolean, update: ((AlarmDraft)
     R.drawable.ic_wb_sunny) { value -> update { it.copy(wakeEnabled = value) } }
   if (!alarm.wakeEnabled) return
   HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
-  Stepper("Ask after", alarm.wakeDelayMinutes, minutesText(alarm.wakeDelayMinutes), alarm.wakeDelayMinutes > 1, alarm.wakeDelayMinutes < 1440,
+  SwitchRow("Ask at a random time", "Picks a moment within a range so you can't plan around it.", alarm.wakeRandomDelay, !busy) { value ->
+    update { it.copy(wakeRandomDelay = value) }
+  }
+  if (alarm.wakeRandomDelay) {
+    val min = alarm.wakeDelayMinMinutes; val max = alarm.wakeDelayMaxMinutes
+    Stepper("Earliest", min, minutesText(min), min > 1, min < max,
+      { update { it.copy(wakeDelayMinMinutes = nextMinutes(min, false)) } },
+      { update { it.copy(wakeDelayMinMinutes = nextMinutes(min, true).coerceAtMost(max)) } })
+    Stepper("Latest", max, minutesText(max), max > min, max < 1440,
+      { update { it.copy(wakeDelayMaxMinutes = nextMinutes(max, false).coerceAtLeast(min)) } },
+      { update { it.copy(wakeDelayMaxMinutes = nextMinutes(max, true)) } })
+  } else Stepper("Ask after", alarm.wakeDelayMinutes, minutesText(alarm.wakeDelayMinutes), alarm.wakeDelayMinutes > 1, alarm.wakeDelayMinutes < 1440,
     { update { it.copy(wakeDelayMinutes = nextMinutes(it.wakeDelayMinutes, false)) } },
     { update { it.copy(wakeDelayMinutes = nextMinutes(it.wakeDelayMinutes, true)) } })
   Stepper("Time to answer", alarm.wakeResponseMinutes, minutesText(alarm.wakeResponseMinutes), alarm.wakeResponseMinutes > 1, alarm.wakeResponseMinutes < 1440,

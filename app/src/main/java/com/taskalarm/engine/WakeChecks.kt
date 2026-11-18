@@ -51,7 +51,9 @@ internal class WakeChecks(
     if (!alarm.optBoolean("wakeEnabled")) return
     check(Build.VERSION.SDK_INT < 31 || alarms.canScheduleExactAlarms()) { "Restore Alarms & reminders access before dismissing this alarm" }
     val startedAt = now()
-    val dueTime = startedAt + if (test) 0L else alarm.optInt("wakeDelayMinutes", 5) * 60_000L
+    val delayMinutes = if (alarm.optBoolean("wakeRandomDelay")) TaskOrder.randomMinutes(alarm.optInt("wakeDelayMinMinutes", 3), alarm.optInt("wakeDelayMaxMinutes", 7))
+      else alarm.optInt("wakeDelayMinutes", 5)
+    val dueTime = startedAt + if (test) 0L else delayMinutes * 60_000L
     val record = JSONObject().put("sessionId", UUID.randomUUID().toString()).put("alarm", JSONObject(alarm.toString()))
       .put("test", test).put("stage", "scheduled").put("dueAt", dueTime).put("reminderAt", startedAt + 120_000L)
       .put("deadlineAt", dueTime + alarm.optInt("wakeResponseMinutes", 5) * 60_000L)
@@ -104,7 +106,9 @@ internal class WakeChecks(
     if (record.getString("stage") == "scheduled") {
       record.put("stage", "waiting")
       if (record.getJSONObject("alarm").optString("wakeMode", "yes_no") == "tasks") {
-        SessionTasks.start(record, record.getJSONObject("alarm").getJSONArray("wakeTasks"))
+        val alarm = record.getJSONObject("alarm")
+        if (alarm.optBoolean("shuffleTasks")) alarm.put("wakeTasks", TaskOrder.shuffled(alarm.getJSONArray("wakeTasks")))
+        SessionTasks.start(record, alarm.getJSONArray("wakeTasks"))
       }
       put(record)
     }

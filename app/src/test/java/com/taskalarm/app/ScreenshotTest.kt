@@ -51,9 +51,12 @@ class ScreenshotTest {
   private fun homeState(alarms: List<JSONObject>, readiness: JSONObject = JSONObject(), checks: List<JSONObject> = emptyList()) =
     JSONObject().put("alarms", JSONArray(alarms)).put("readiness", readiness).put("wakeChecks", JSONArray(checks))
 
-  private fun capture(name: String, dark: Boolean, content: @Composable () -> Unit) {
+  /** [frozen] renders one frame without idling, for screens with endless effects (e.g. the moving Dismiss button). */
+  private fun capture(name: String, dark: Boolean, frozen: Boolean = false, content: @Composable () -> Unit) {
+    if (frozen) compose.mainClock.autoAdvance = false
     screen = { TaskAlarmTheme(dark) { Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { content() } } }
-    compose.waitForIdle()
+    if (frozen) repeat(5) { compose.mainClock.advanceTimeByFrame(); org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle() }
+    else compose.waitForIdle()
     val view = compose.activity.window.decorView
     val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
     view.draw(Canvas(bitmap))
@@ -107,12 +110,17 @@ class ScreenshotTest {
     val wakeTasks = JSONObject(wake.toString()).put("alarm", morning.copy(wakeMode = "tasks", wakeTasks = listOf(TaskDraft(kind = "text", difficulty = "medium"))).json())
       .put("taskIndex", 0).put("round", 1).put("kind", "text").put("prompt", "K7mP3xRa9q").put("challengeId", "c2")
     capture("wake-tasks", true) { WakeCheckScreen(wakeTasks, false, null, now, {}, {}, {}, {}) }
+    val limited = JSONObject(ringing.toString()).put("alarm", morning.copy(snoozeLimit = 3, vibrate = true).json().put("snoozeCount", 1))
+    capture("ringing-limit", true) { RingingScreen(limited, false, null, now, {}, {}, {}, {}, {}) }
+    val moving = JSONObject(ringing.toString()).put("alarm", morning.copy(movingDismiss = true).json())
+    capture("ringing-moving", true, frozen = true) { RingingScreen(moving, false, null, now, {}, {}, {}, {}, {}) }
   }
 
-  @Test @Config(qualifiers = "w412dp-h2400dp-420dpi")
+  @Test @Config(qualifiers = "w412dp-h3000dp-420dpi")
   fun fullEditor() {
     start()
-    val full = morning.copy(snoozeTasks = emptyList(), wakeMode = "tasks", wakeReuseDismissTasks = false, protectVolume = true)
+    val full = morning.copy(snoozeTasks = emptyList(), wakeMode = "tasks", wakeReuseDismissTasks = false, protectVolume = true,
+      snoozeLimit = 3, harderAfterSnooze = true, vibrate = true, shuffleTasks = true, wakeRandomDelay = true)
     for (dark in listOf(true, false)) capture("editor-full", dark) {
       EditorScreen(full, false, JSONObject().put("flashlightAvailable", true).put("cameraPermission", false), false, now,
         {}, {}, {}, {}, {}, {}, {}, { _, _ -> })

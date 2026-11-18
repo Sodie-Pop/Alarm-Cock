@@ -3,7 +3,9 @@ package com.taskalarm.app
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
@@ -100,6 +102,15 @@ internal fun Stepper(label: String, value: Int, display: String, canDecrease: Bo
     Text(display, style = MaterialTheme.typography.titleMedium, modifier = Modifier.widthIn(min = 72.dp).padding(horizontal = 4.dp),
       textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     FilledTonalIconButton(onClick = onIncrease, enabled = canIncrease) { Ico(R.drawable.ic_add, "Increase $label") }
+  }
+}
+
+/** Labelled, horizontally scrolling single-choice chips. */
+@Composable
+internal fun <T> ChipChoice(label: String, options: List<T>, selected: T, text: (T) -> String, enabled: Boolean = true, onSelect: (T) -> Unit) {
+  Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
+  Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    options.forEach { option -> FilterChip(selected == option, { onSelect(option) }, label = { Text(text(option)) }, enabled = enabled) }
   }
 }
 

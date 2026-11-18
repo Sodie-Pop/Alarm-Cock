@@ -140,7 +140,10 @@ private fun AlarmCard(alarm: AlarmDraft, busy: Boolean, is24: Boolean, onEdit: (
       FlowRow(Modifier.padding(end = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (alarm.dismissTasks.isEmpty()) InfoPill(R.drawable.ic_check, "No tasks")
         alarm.dismissTasks.forEach { InfoPill(taskIcon(it.kind), taskPill(it)) }
-        InfoPill(R.drawable.ic_snooze, "${alarm.snoozeMinutes} min" + if (alarm.snoozeTasks.isNotEmpty()) " · ${alarm.snoozeTasks.size} task${if (alarm.snoozeTasks.size > 1) "s" else ""}" else "")
+        if (!alarm.allowSnooze) InfoPill(R.drawable.ic_snooze, "No snooze")
+        else InfoPill(R.drawable.ic_snooze, "${alarm.snoozeMinutes} min" + (if (alarm.snoozeLimit > 0) " ×${alarm.snoozeLimit}" else "") +
+          if (alarm.snoozeTasks.isNotEmpty()) " · ${alarm.snoozeTasks.size} task${if (alarm.snoozeTasks.size > 1) "s" else ""}" else "")
+        if (alarm.vibrate) InfoPill(R.drawable.ic_vibration, "Vibrate")
         if (alarm.wakeEnabled) InfoPill(R.drawable.ic_wb_sunny, "Wake check")
         if (alarm.flashlightMode != "off") InfoPill(R.drawable.ic_flashlight_on, if (alarm.flashlightMode == "flashing") "Flashing" else "Light")
       }

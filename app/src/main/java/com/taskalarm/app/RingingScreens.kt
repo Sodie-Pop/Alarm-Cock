@@ -20,6 +20,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.taskalarm.engine.AlarmEngine
 import org.json.JSONObject
 import java.time.Instant
 import java.time.ZoneId
@@ -33,6 +34,9 @@ internal fun RingingScreen(active: JSONObject, busy: Boolean, answerError: Strin
   val action = if (active.isNull("action")) null else active.getString("action")
   val test = active.optBoolean("test")
   val muted = active.optBoolean("muted")
+  val snoozesLeft = AlarmEngine.snoozesLeft(active.getJSONObject("alarm"))
+  val canSnooze = snoozesLeft != 0
+  val snoozeTitle = if (test) "Snooze (ends test)" else "Snooze ${minutesText(alarm.snoozeMinutes)}"
   TaskAlarmTheme(dark = true) {
     Box(Modifier.fillMaxSize().background(NightSky)) {
       val topRow = @Composable {
@@ -49,7 +53,22 @@ internal fun RingingScreen(active: JSONObject, busy: Boolean, answerError: Strin
           if (active.optBoolean("volumeGuardBlocked")) Notice("Android blocked the volume guard. Check your alarm volume.")
           if (active.optBoolean("flashlightBlocked")) Notice("Flashlight unavailable — another app may be using the camera. Your alarm continues.")
           if (test) Notice("To stop a test, finish its tasks.", R.drawable.ic_play_arrow, MaterialTheme.colorScheme.onSurfaceVariant)
+          if (!canSnooze && alarm.allowSnooze) Notice("No snoozes left — complete the dismiss tasks.", R.drawable.ic_info, MaterialTheme.colorScheme.onSurfaceVariant)
         }
+      }
+      if (action == null && alarm.movingDismiss) {
+        Box(Modifier.fillMaxSize().systemBarsPadding().padding(horizontal = 24.dp)) {
+          Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            topRow()
+            Spacer(Modifier.height(32.dp))
+            LiveClock(now, 104)
+            Text(alarm.label, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(16.dp))
+            notices()
+          }
+          MovingDismiss(!busy, if (canSnooze) snoozeTitle else null, { onAction("dismiss") }, { onAction("snooze") })
+        }
+        return@Box
       }
       if (action == null) {
         // Choosing: big clock up top, actions anchored at the bottom within thumb reach.
@@ -63,7 +82,7 @@ internal fun RingingScreen(active: JSONObject, busy: Boolean, answerError: Strin
           Spacer(Modifier.height(16.dp))
           BigChoice("Dismiss", tasksLine(alarm.dismissTasks, "Turn off now"), R.drawable.ic_alarm_clock, primary = true, enabled = !busy) { onAction("dismiss") }
           Spacer(Modifier.height(12.dp))
-          BigChoice(if (test) "Snooze (ends test)" else "Snooze ${minutesText(alarm.snoozeMinutes)}", tasksLine(alarm.snoozeTasks, "Snooze now"),
+          if (canSnooze) BigChoice(snoozeTitle, tasksLine(alarm.snoozeTasks, "Snooze now") + if (snoozesLeft > 0) " · $snoozesLeft left" else "",
             R.drawable.ic_snooze, primary = false, enabled = !busy) { onAction("snooze") }
           Spacer(Modifier.height(24.dp))
         }
@@ -79,16 +98,47 @@ internal fun RingingScreen(active: JSONObject, busy: Boolean, answerError: Strin
           ChallengePanel(active, alarm.tasks(action), if (action == "dismiss") "Dismiss" else "Snooze", busy, answerError, onSubmit, onScan, onAnswerEdit)
           if (muted) Text("Muted while you solve. Leaving the app unmutes.", style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
-          TextButton(onClick = { onAction(if (action == "dismiss") "snooze" else "dismiss") }, enabled = !busy, modifier = Modifier.padding(top = 8.dp)) {
-            Text(if (action == "dismiss") "Snooze instead" else "Dismiss instead")
+          if (action == "snooze" || canSnooze) {
+            TextButton(onClick = { onAction(if (action == "dismiss") "snooze" else "dismiss") }, enabled = !busy, modifier = Modifier.padding(top = 8.dp)) {
+              Text(if (action == "dismiss") "Snooze instead" else "Dismiss instead")
+            }
+            Text("Switching starts that action's tasks from the beginning.", style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
           }
-          Text("Switching starts that action's tasks from the beginning.", style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
         }
         Spacer(Modifier.height(20.dp))
         notices()
         Spacer(Modifier.height(24.dp))
       }
+    }
+  }
+}
+
+/**
+ * Small Dismiss button that jumps to a random spot every 5 seconds, avoiding the fixed, smaller Snooze in the corner.
+ * Tapping it only starts the dismiss tasks; it never skips them.
+ */
+@Composable
+private fun MovingDismiss(enabled: Boolean, snoozeTitle: String?, onDismiss: () -> Unit, onSnooze: () -> Unit) {
+  BoxWithConstraints(Modifier.fillMaxSize().padding(bottom = 24.dp)) {
+    val buttonW = 120.dp; val buttonH = 52.dp; val snoozeW = 168.dp; val snoozeH = 44.dp
+    val spanX = (maxWidth - buttonW).coerceAtLeast(0.dp); val spanY = (maxHeight - buttonH).coerceAtLeast(0.dp)
+    fun pick(): Pair<Float, Float> {
+      repeat(20) {
+        val x = kotlin.random.Random.nextFloat(); val y = 0.25f + kotlin.random.Random.nextFloat() * 0.75f
+        val overlapsSnooze = snoozeTitle != null && spanX * x + buttonW > maxWidth - snoozeW - 12.dp && spanY * y + buttonH > maxHeight - snoozeH - 12.dp
+        if (!overlapsSnooze) return x to y
+      }
+      return 0.1f to 0.5f
+    }
+    var spot by remember { mutableStateOf(0.5f to 0.6f) }
+    LaunchedEffect(maxWidth, maxHeight) { while (true) { kotlinx.coroutines.delay(5_000); spot = pick() } }
+    Button(onClick = onDismiss, enabled = enabled, modifier = Modifier.offset(x = spanX * spot.first, y = spanY * spot.second).size(buttonW, buttonH)) {
+      Text("Dismiss", style = MaterialTheme.typography.titleMedium)
+    }
+    if (snoozeTitle != null) FilledTonalButton(onClick = onSnooze, enabled = enabled,
+      modifier = Modifier.align(Alignment.BottomEnd).widthIn(max = snoozeW).heightIn(min = snoozeH)) {
+      Ico(R.drawable.ic_snooze, size = 18.dp); Spacer(Modifier.width(6.dp)); Text(snoozeTitle, maxLines = 1)
     }
   }
 }
